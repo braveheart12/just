@@ -199,6 +199,7 @@ func (ar *Runner) callHandler() func(http.ResponseWriter, *http.Request) {
 		resp.TraceID = traceID
 
 		insLog.Infof("[ callHandler ] Incoming request: %s", req.RequestURI)
+		insLog.Infof("[ callHandlerBody ] Incoming request: %s", signedPayload.Method, signedPayload.Seed, signedPayload.Params, signedPayload.Reference)
 
 		if request.LogLevel != nil {
 			logLevelNumber, err := insolar.ParseLevel(*request.LogLevel)
