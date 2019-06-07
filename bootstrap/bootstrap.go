@@ -34,7 +34,6 @@ import (
 	"github.com/insolar/insolar/insolar/rootdomain"
 	"github.com/insolar/insolar/insolar/secrets"
 	"github.com/insolar/insolar/instrumentation/inslogger"
-	"github.com/insolar/insolar/platformpolicy"
 	"github.com/pkg/errors"
 )
 
@@ -73,12 +72,23 @@ func (g *Generator) Run(ctx context.Context) error {
 
 	inslog := inslogger.FromContext(ctx)
 
-	inslog.Info("[ bootstrap ] read keys file")
-	pair, err := secrets.ReadKeysFile(g.config.RootKeysFile)
+	inslog.Info("[ bootstrap ] read keys files")
+	rootPublicKey, err := secrets.GetPublicKeyFromFile(g.config.RootKeysFile)
 	if err != nil {
 		return errors.Wrap(err, "couldn't get root keys")
 	}
-	publicKey := platformpolicy.MustPublicKeyToString(pair.Public)
+	mdAdminPublicKey, err := secrets.GetPublicKeyFromFile(g.config.MDAdminKeysFile)
+	if err != nil {
+		return errors.Wrap(err, "couldn't get root keys")
+	}
+	oraclePublicKeys := map[string]string{}
+	for _, o := range g.config.OracleKeysFiles {
+		pk, err := secrets.GetPublicKeyFromFile(o.KeysFile)
+		if err != nil {
+			return errors.Wrap(err, "couldn't get root keys")
+		}
+		oraclePublicKeys[o.Name] = pk
+	}
 
 	inslog.Info("[ bootstrap ] generate plugins")
 	err = g.generatePlugins()
@@ -106,8 +116,11 @@ func (g *Generator) Run(ctx context.Context) error {
 
 	inslog.Info("[ bootstrap ] create heavy genesis config ...")
 	contractsConfig := insolar.GenesisContractsConfig{
-		RootBalance:   g.config.RootBalance,
-		RootPublicKey: publicKey,
+		RootBalance:      g.config.RootBalance,
+		MDBalance:        g.config.MDBalance,
+		RootPublicKey:    rootPublicKey,
+		OraclePublicKeys: oraclePublicKeys,
+		MDAdminPublicKey: mdAdminPublicKey,
 	}
 	err = g.makeHeavyGenesisConfig(discoveryNodes, contractsConfig)
 	if err != nil {

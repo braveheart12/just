@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/insolar/insolar/insolar"
-	"github.com/insolar/insolar/logicrunner/builtin/proxy/helloworld"
 	"github.com/insolar/insolar/logicrunner/goplugin/foundation"
 )
 

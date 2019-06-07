@@ -43,11 +43,11 @@ func TestReferences(t *testing.T) {
 		},
 		insolar.GenesisNameMember: {
 			got:    ContractRootMember,
-			expect: "1tJCspdy6s9Ve9vASgdmgnRzdZk3xskhqBcfrLNCGr.1tJDJLGWcX3TCXZMzZodTYWZyJGVdsajgGqyq8Vidw",
+			expect: "1tJC7WqTjHrN5YvPC2x7dSiL4gouoHtoAVBUjK7JB6.11111111111111111111111111111111",
 		},
 		insolar.GenesisNameWallet: {
 			got:    ContractRootWallet,
-			expect: "1tJD4tvUdCMzKFxXUu6Q8AXB2Ubdy4PVqJ4G7TZEKt.1tJDJLGWcX3TCXZMzZodTYWZyJGVdsajgGqyq8Vidw",
+			expect: "1tJDNBMRSEXJbRjuUkPnqs9CNnLDsPQeYpXJpkhNpP.11111111111111111111111111111111",
 		},
 	}
 

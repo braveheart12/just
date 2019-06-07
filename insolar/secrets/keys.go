@@ -56,6 +56,15 @@ func ReadKeysFile(file string) (*KeyPair, error) {
 	return ReadKeys(bytes.NewReader(b))
 }
 
+// GetPublicKeyFromFile reads private/public keys pair from json file and return public key
+func GetPublicKeyFromFile(file string) (string, error) {
+	pair, err := ReadKeysFile(file)
+	if err != nil {
+		return "", errors.Wrap(err, "couldn't get keys")
+	}
+	return platformpolicy.MustPublicKeyToString(pair.Public), nil
+}
+
 // ReadKeysFile reads and parses json from reader, returns parsed private/public keys pair.
 func ReadKeys(r io.Reader) (*KeyPair, error) {
 	var keys map[string]string

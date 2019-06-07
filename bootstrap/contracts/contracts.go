@@ -23,18 +23,28 @@ import (
 	"github.com/insolar/insolar/application/contract/wallet"
 	"github.com/insolar/insolar/insolar"
 	"github.com/insolar/insolar/insolar/genesisrefs"
+	insrootdomain "github.com/insolar/insolar/insolar/rootdomain"
 )
 
 // GenesisContractsStates returns list contract configs for genesis.
 //
 // Hint: order matters, because of dependency contracts on each other.
 func GenesisContractsStates(cfg insolar.GenesisContractsConfig) []insolar.GenesisContractState {
-	return []insolar.GenesisContractState{
+	for name := range cfg.OraclePublicKeys {
+		genesisrefs.ContractOracleMembers[name] = insrootdomain.GenesisRef(name + insolar.GenesisNameMember)
+	}
+	result := []insolar.GenesisContractState{
 		rootDomain(),
 		nodeDomain(),
-		rootMember(cfg.RootPublicKey),
-		rootWallet(cfg.RootBalance),
+		getMemberGenesisContractState(cfg.RootPublicKey, insolar.GetGenesisNameRootMember(), insolar.GetGenesisNameRootDomain()),
+		getWalletGenesisContractState(cfg.RootBalance, insolar.GetGenesisNameRootWallet(), insolar.GetGenesisNameRootMember()),
+		getMemberGenesisContractState(cfg.MDAdminPublicKey, insolar.GetGenesisNameMDAdminMember(), insolar.GetGenesisNameRootDomain()),
+		getWalletGenesisContractState(cfg.MDBalance, insolar.GetGenesisNameMDWallet(), insolar.GetGenesisNameMDAdminMember()),
 	}
+	for name, key := range cfg.OraclePublicKeys {
+		result = append(result, getMemberGenesisContractState(key, insolar.GetGenesisNameOracleMembers(name), insolar.GetGenesisNameRootDomain()))
+	}
+	return result
 }
 
 func rootDomain() insolar.GenesisContractState {
@@ -43,8 +53,14 @@ func rootDomain() insolar.GenesisContractState {
 		ParentName: "",
 
 		Memory: mustGenMemory(&rootdomain.RootDomain{
-			RootMember:    genesisrefs.ContractRootMember,
-			NodeDomainRef: genesisrefs.ContractNodeDomain,
+			RootMember:        genesisrefs.ContractRootMember,
+			OracleMembers:     genesisrefs.ContractOracleMembers,
+			MDAdminMember:     genesisrefs.ContractMDAdminMember,
+			MDWallet:          genesisrefs.ContractMDWallet,
+			BurnAddressMap:    map[string]insolar.Reference{},
+			PublicKeyMap:      map[string]insolar.Reference{},
+			FreeBurnAddresses: []string{},
+			NodeDomain:        genesisrefs.ContractNodeDomain,
 		}),
 	}
 }
@@ -58,28 +74,28 @@ func nodeDomain() insolar.GenesisContractState {
 	}
 }
 
-func rootMember(publicKey string) insolar.GenesisContractState {
+func getMemberGenesisContractState(publicKey string, name string, parrent string) insolar.GenesisContractState {
 	m, err := member.New("RootMember", publicKey)
 	if err != nil {
 		panic("root member constructor failed")
 	}
 
 	return insolar.GenesisContractState{
-		Name:       insolar.GenesisNameRootMember,
-		ParentName: insolar.GenesisNameRootDomain,
+		Name:       name,
+		ParentName: parrent,
 		Memory:     mustGenMemory(m),
 	}
 }
 
-func rootWallet(balance uint) insolar.GenesisContractState {
+func getWalletGenesisContractState(balance string, name string, parrent string) insolar.GenesisContractState {
 	w, err := wallet.New(balance)
 	if err != nil {
 		panic("failed to create wallet instance")
 	}
 
 	return insolar.GenesisContractState{
-		Name:       insolar.GenesisNameRootWallet,
-		ParentName: insolar.GenesisNameRootMember,
+		Name:       name,
+		ParentName: parrent,
 		Delegate:   true,
 		Memory:     mustGenMemory(w),
 	}

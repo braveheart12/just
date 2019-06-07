@@ -31,6 +31,25 @@ const (
 	GenesisNameDeposit = "deposit"
 )
 
+func GetGenesisNameRootDomain() string {
+	return GenesisNameRootDomain
+}
+func GetGenesisNameRootMember() string {
+	return "root" + GenesisNameMember
+}
+func GetGenesisNameRootWallet() string {
+	return "root" + GenesisNameWallet
+}
+func GetGenesisNameMDAdminMember() string {
+	return "mdadmin" + GenesisNameMember
+}
+func GetGenesisNameMDWallet() string {
+	return "md" + GenesisNameWallet
+}
+func GetGenesisNameOracleMembers(oracleName string) string {
+	return oracleName + GenesisNameMember
+}
+
 type genesisBinary []byte
 
 // GenesisRecord is initial chain record.
@@ -62,8 +81,11 @@ type GenesisContractState struct {
 
 // GenesisContractsConfig carries data required for contract object initialization via genesis.
 type GenesisContractsConfig struct {
-	RootBalance   uint
-	RootPublicKey string
+	RootBalance      string
+	MDBalance        string
+	RootPublicKey    string
+	OraclePublicKeys map[string]string
+	MDAdminPublicKey string
 }
 
 // GenesisHeavyConfig carries data required for initial genesis on heavy node.
