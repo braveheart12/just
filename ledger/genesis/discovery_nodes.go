@@ -111,7 +111,7 @@ func (nm *DiscoveryNodeManager) addDiscoveryNodes(
 
 		contract, err := nm.activateNodeRecord(ctx, nodeState)
 		if err != nil {
-			return nil, errors.Wrap(err, "[ activateDiscoveryNodes ] Couldn't activateNodeRecord nodeInfo instance")
+			return nil, errors.Wrap(err, "failed activate node instance")
 		}
 
 		indexMap[n.key] = contract.String()

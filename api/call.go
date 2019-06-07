@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -27,7 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/square/go-jose"
 
-	insolarJose "github.com/insolar/go-jose"
+	insolarjose "github.com/insolar/go-jose"
 	"github.com/insolar/insolar/api/seedmanager"
 	"github.com/insolar/insolar/application/extractor"
 	"github.com/insolar/insolar/insolar"
@@ -186,6 +187,9 @@ func (ar *Runner) callHandler() func(http.ResponseWriter, *http.Request) {
 			processError(err, "Can't verify signature", &resp, insLog)
 			return
 		}
+		fmt.Println("QWE!!")
+		fmt.Println(signedPayload)
+		fmt.Println(signedPayload.Reference)
 
 		startTime := time.Now()
 		defer func() {
@@ -255,13 +259,13 @@ func verify(publicKey string, _signature string) (*SignedPayload, error) {
 	case "P-256K":
 		{
 			// unmarshal public key
-			public := insolarJose.JSONWebKey{}
+			public := insolarjose.JSONWebKey{}
 			err = public.UnmarshalJSON([]byte(publicKey))
 			if err != nil {
 				return nil, err
 			}
 			// parse jws token
-			signature, err := insolarJose.ParseSigned(_signature)
+			signature, err := insolarjose.ParseSigned(_signature)
 			if err != nil {
 				return nil, err
 			}

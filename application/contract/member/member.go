@@ -68,7 +68,7 @@ func New(ethAddr string, key string) (*Member, error) {
 		PublicKey: key,
 	}, nil
 }
-func NewOracleMember(name string, key string) (*Member, error) {
+func NewBasicMember(name string, key string) (*Member, error) {
 	return &Member{
 		Name:      name,
 		PublicKey: key,

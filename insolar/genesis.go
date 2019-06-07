@@ -34,6 +34,12 @@ const (
 func GetGenesisNameRootDomain() string {
 	return GenesisNameRootDomain
 }
+func GetGenesisNameNodeDomain() string {
+	return GenesisNameNodeDomain
+}
+func GetGenesisNameNodeRecord() string {
+	return GenesisNameNodeRecord
+}
 func GetGenesisNameRootMember() string {
 	return "root" + GenesisNameMember
 }

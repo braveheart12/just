@@ -25,7 +25,7 @@ import (
 
 // PrototypeReference to prototype of this contract
 // error checking hides in generator
-var PrototypeReference, _ = insolar.NewReferenceFromBase58("1111PfXUeB9wdch8188My3n78KC9k6WP9bnU6F3q4g.11111111111111111111111111111111")
+var PrototypeReference, _ = insolar.NewReferenceFromBase58("11111GLo1hGQauZRz89Rp2Sq3444rDFcQiMZwXdZAy.11111111111111111111111111111111")
 
 // Member holds proxy type
 type Member struct {
@@ -92,8 +92,8 @@ func New(ethAddr string, key string) *ContractConstructorHolder {
 	return &ContractConstructorHolder{constructorName: "New", argsSerialized: argsSerialized}
 }
 
-// NewOracleMember is constructor
-func NewOracleMember(name string, key string) *ContractConstructorHolder {
+// NewBasicMember is constructor
+func NewBasicMember(name string, key string) *ContractConstructorHolder {
 	var args [2]interface{}
 	args[0] = name
 	args[1] = key
@@ -104,7 +104,7 @@ func NewOracleMember(name string, key string) *ContractConstructorHolder {
 		panic(err)
 	}
 
-	return &ContractConstructorHolder{constructorName: "NewOracleMember", argsSerialized: argsSerialized}
+	return &ContractConstructorHolder{constructorName: "NewBasicMember", argsSerialized: argsSerialized}
 }
 
 // GetReference returns reference of the object
