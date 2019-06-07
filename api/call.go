@@ -24,6 +24,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/square/go-jose"
+
 	insolarJose "github.com/insolar/go-jose"
 	"github.com/insolar/insolar/api/seedmanager"
 	"github.com/insolar/insolar/application/extractor"
@@ -33,8 +36,6 @@ import (
 	"github.com/insolar/insolar/instrumentation/inslogger"
 	"github.com/insolar/insolar/instrumentation/instracer"
 	"github.com/insolar/insolar/metrics"
-	"github.com/pkg/errors"
-	"github.com/square/go-jose"
 )
 
 // Request is a representation of request struct to api

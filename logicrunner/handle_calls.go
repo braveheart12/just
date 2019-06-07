@@ -26,6 +26,8 @@ import (
 	"github.com/insolar/insolar/insolar/reply"
 	"github.com/insolar/insolar/instrumentation/inslogger"
 	"github.com/insolar/insolar/instrumentation/instracer"
+	"github.com/insolar/insolar/log"
+
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 )
@@ -36,7 +38,7 @@ type HandleCall struct {
 	Message bus.Message
 }
 
-func (h *HandleCall) executeActual(
+func (h *HandleCall) handleActual(
 	ctx context.Context,
 	parcel insolar.Parcel,
 	msg *message.CallMethod,
@@ -49,19 +51,11 @@ func (h *HandleCall) executeActual(
 
 	os.Lock()
 	if os.ExecutionState == nil {
-		os.ExecutionState = &ExecutionState{
-			Ref:   ref,
-			Queue: make([]ExecutionQueueElement, 0),
-		}
+		os.ExecutionState = NewExecutionState(ref)
 	}
 	es := os.ExecutionState
 	os.Unlock()
 
-	// ExecutionState should be locked between CheckOurRole and
-	// appending ExecutionQueueElement to the queue to prevent a race condition.
-	// Otherwise it's possible that OnPulse will clean up the queue and set
-	// ExecutionState.Pending to NotPending. Execute will add an element to the
-	// queue afterwards. In this case cross-pulse execution will break.
 	es.Lock()
 
 	procCheckRole := CheckOurRole{
@@ -72,8 +66,10 @@ func (h *HandleCall) executeActual(
 
 	if err := f.Procedure(ctx, &procCheckRole, true); err != nil {
 		es.Unlock()
-		// TODO: check if error is ErrCancelled
-		return nil, errors.Wrap(err, "[ executeActual ] can't play role")
+		if err == flow.ErrCancelled {
+			return nil, err // message bus will retry on the calling side in ContractRequester
+		}
+		return nil, errors.Wrap(err, "[ HandleCall.handleActual ] can't play role")
 	}
 
 	if lr.CheckExecutionLoop(ctx, es, parcel) {
@@ -82,10 +78,19 @@ func (h *HandleCall) executeActual(
 	}
 	es.Unlock()
 
-	request, err := lr.RegisterRequest(ctx, parcel)
-	if err != nil {
-		return nil, os.WrapError(err, "[ Execute ] can't create request")
+	// RegisterRequest is an external, slow call to the LME thus we have to
+	// unlock ExecutionState during the call.
+
+	procRegisterRequest := NewRegisterRequest(parcel, h.dep)
+
+	if err := f.Procedure(ctx, procRegisterRequest, true); err != nil {
+		if err == flow.ErrCancelled {
+			// Requests need to be deduplicated. For now in case of ErrCancelled we may have 2 registered requests
+			return nil, err // message bus will retry on the calling side in ContractRequester
+		}
+		return nil, os.WrapError(err, "[ HandleCall.handleActual ] can't create request")
 	}
+	request := procRegisterRequest.getResult()
 
 	es.Lock()
 	qElement := ExecutionQueueElement{
@@ -93,6 +98,7 @@ func (h *HandleCall) executeActual(
 		parcel:  parcel,
 		request: request,
 	}
+	log.Error(request)
 
 	es.Queue = append(es.Queue, qElement)
 	es.Unlock()
@@ -105,20 +111,42 @@ func (h *HandleCall) executeActual(
 
 	if err := f.Procedure(ctx, &procClarifyPendingState, true); err != nil {
 		if err == flow.ErrCancelled {
-			// TODO: it's done to support current logic. Do it correctly when go to flow
-			f.Continue(ctx)
-		} else {
-			return nil, err
-		}
-	}
+			// If the flow has canceled during ClarifyPendingState there are two possibilities.
+			// 1. It's possible that we started to execute ClarifyPendingState, the pulse has
+			// changed and the execution queue was sent to the next executor in OnPulse method.
+			// This means that the next executor already has the last queue element, it's OK.
+			// 2. It's also possible that the pulse has changed after RegisterRequest but
+			// before adding an item to the execution queue. In this case the queue was sent to the
+			// next executor without the last item. We could just return ErrCanceled to make the
+			// caller to resend the request. However this will cause a slow request deduplication
+			// process on the LME side (it will be caused anyway by another modifying request if
+			// the object is used a lot, but many requests are read-only and don't cause deduplication).
+			// As an optimization we decided to send a special message type to the next executor.
+			// It's possible that while we send the message the pulse will change once again and
+			// the receiver will be not an executor of the object anymore. However in this case
+			// MessageBus will automatically resend the message to the right VE.
 
-	s := StartQueueProcessorIfNeeded{
-		es:  es,
-		dep: h.dep,
-		ref: &ref,
-	}
-	if err := f.Handle(ctx, s.Present); err != nil {
-		inslogger.FromContext(ctx).Warn("[ executeActual ] StartQueueProcessorIfNeeded returns error: ", err)
+			additionalCallMsg := message.AdditionalCallFromPreviousExecutor{
+				ObjectReference: ref,
+				Parcel:          parcel,
+				Request:         request,
+			}
+
+			_, err = lr.MessageBus.Send(ctx, &additionalCallMsg, nil)
+			if err != nil {
+				inslogger.FromContext(ctx).Error("[ HandleCall.handleActual ] mb.Send failed to send AdditionalCallFromPreviousExecutor, ", err)
+			}
+		}
+		// and return RegisterRequest as usual
+	} else {
+		s := StartQueueProcessorIfNeeded{
+			es:  es,
+			dep: h.dep,
+			ref: &ref,
+		}
+		if err := f.Handle(ctx, s.Present); err != nil {
+			inslogger.FromContext(ctx).Warn("[ HandleCall.handleActual ] StartQueueProcessorIfNeeded returns error: ", err)
+		}
 	}
 
 	return &reply.RegisterRequest{
@@ -137,16 +165,101 @@ func (h *HandleCall) Present(ctx context.Context, f flow.Flow) error {
 		return errors.New("is not CallMethod message")
 	}
 
-	ctx, span := instracer.StartSpan(ctx, "LogicRunner.Execute")
+	ctx, span := instracer.StartSpan(ctx, "HandleCall.Present")
 	span.AddAttributes(
 		trace.StringAttribute("msg.Type", msg.Type().String()),
 	)
 	defer span.End()
 
 	r := bus.Reply{}
-	r.Reply, r.Err = h.executeActual(ctx, parcel, msg, f)
+	r.Reply, r.Err = h.handleActual(ctx, parcel, msg, f)
 
 	h.Message.ReplyTo <- r
 	return nil
 
+}
+
+type HandleAdditionalCallFromPreviousExecutor struct {
+	dep *Dependencies
+
+	Message bus.Message
+}
+
+// This is basically a simplified version of HandleCall.handleActual().
+// Please note that currently we lack any fraud detection here.
+// Ideally we should check that the previous executor was really an executor
+// during previous pulse, that the request was really registered, etc.
+// Also we don't handle case when pulse changes during execution of this handle.
+// In this scenario user is in a bad luck. The request will be lost and user will have
+// to re-send it after some timeout.
+func (h *HandleAdditionalCallFromPreviousExecutor) handleActual(
+	ctx context.Context,
+	msg *message.AdditionalCallFromPreviousExecutor,
+	f flow.Flow,
+) {
+	lr := h.dep.lr
+	ref := msg.ObjectReference
+
+	os := lr.UpsertObjectState(ref)
+
+	os.Lock()
+	if os.ExecutionState == nil {
+		os.ExecutionState = NewExecutionState(ref)
+	}
+	es := os.ExecutionState
+	os.Unlock()
+
+	es.Lock()
+	qElement := ExecutionQueueElement{
+		ctx:     ctx,
+		parcel:  msg.Parcel,
+		request: msg.Request,
+	}
+	es.Queue = append(es.Queue, qElement)
+	es.Unlock()
+
+	procClarifyPendingState := ClarifyPendingState{
+		es:              es,
+		parcel:          msg.Parcel,
+		ArtifactManager: lr.ArtifactManager,
+	}
+
+	if err := f.Procedure(ctx, &procClarifyPendingState, true); err != nil {
+		inslogger.FromContext(ctx).Warn("[ HandleAdditionalCallFromPreviousExecutor.handleActual ] ClarifyPendingState returns error: ", err)
+		// We intentionally report OK to the previous executor here. There is no point
+		// in resending the message or anything.
+		return
+	}
+
+	s := StartQueueProcessorIfNeeded{
+		es:  es,
+		dep: h.dep,
+		ref: &ref,
+	}
+	if err := f.Handle(ctx, s.Present); err != nil {
+		inslogger.FromContext(ctx).Warn("[ HandleAdditionalCallFromPreviousExecutor.handleActual ] StartQueueProcessorIfNeeded returns error: ", err)
+	}
+}
+
+func (h *HandleAdditionalCallFromPreviousExecutor) Present(ctx context.Context, f flow.Flow) error {
+	parcel := h.Message.Parcel
+	ctx = loggerWithTargetID(ctx, parcel)
+	inslogger.FromContext(ctx).Debug("HandleAdditionalCallFromPreviousExecutor.Present starts ...")
+
+	msg, ok := parcel.Message().(*message.AdditionalCallFromPreviousExecutor)
+	if !ok {
+		return errors.New("is not AdditionalCallFromPreviousExecutor message")
+	}
+
+	ctx, span := instracer.StartSpan(ctx, "HandleAdditionalCallFromPreviousExecutor.Present")
+	span.AddAttributes(
+		trace.StringAttribute("msg.Type", msg.Type().String()),
+	)
+	defer span.End()
+
+	h.handleActual(ctx, msg, f)
+
+	// we never return any other replies
+	h.Message.ReplyTo <- bus.Reply{Reply: &reply.OK{}}
+	return nil
 }

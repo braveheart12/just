@@ -55,7 +55,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/insolar/insolar/network"
 	"github.com/insolar/insolar/network/hostnetwork/host"
 	"github.com/insolar/insolar/network/hostnetwork/packet"
 	"github.com/insolar/insolar/network/hostnetwork/packet/types"
@@ -66,14 +65,7 @@ import (
 func newPacket() *packet.Packet {
 	sender, _ := host.NewHostN("127.0.0.1:31337", testutils.RandomRef())
 	receiver, _ := host.NewHostN("127.0.0.2:31338", testutils.RandomRef())
-	builder := packet.NewBuilder(sender)
-	p := builder.
-		Receiver(receiver).
-		Type(packet.TestPacket).
-		Request(&packet.RequestTest{[]byte{0, 1, 2, 3}}).
-		RequestID(network.RequestID(123)).
-		Build()
-	return p
+	return packet.NewPacket(sender, receiver, types.Pulse, 123)
 }
 
 func TestNewPacketHandler(t *testing.T) {
@@ -87,12 +79,13 @@ func TestPacketHandler_Handle_Response(t *testing.T) {
 	ph := NewPacketHandler(m)
 
 	req := newPacket()
-	future := m.Create(req)
+	req.SetRequest(&packet.PulseRequest{})
 
+	future := m.Create(req)
 	resp := newPacket()
 	resp.Receiver = req.Sender
 	resp.Sender = req.Receiver
-	resp.IsResponse = true
+	resp.SetResponse(&packet.BasicResponse{})
 
 	ph.Handle(context.Background(), resp)
 
@@ -126,10 +119,11 @@ func TestPacketHandler_Handle_NotProcessable(t *testing.T) {
 	ph := NewPacketHandler(m)
 
 	req := newPacket()
+	req.SetRequest(&packet.PulseRequest{})
 	future := m.Create(req)
 
 	resp := newPacket()
-	resp.IsResponse = true
+	resp.SetResponse(&packet.BasicResponse{})
 
 	ph.Handle(context.Background(), resp)
 
@@ -161,7 +155,7 @@ func TestShouldProcessPacket_WrongType(t *testing.T) {
 	resp := newPacket()
 	resp.Receiver = req.Sender
 	resp.Sender = req.Receiver
-	resp.Type = types.RPC
+	resp.Type = uint32(types.RPC)
 
 	require.False(t, shouldProcessPacket(future, resp))
 }
@@ -182,7 +176,7 @@ func TestShouldProcessPacket_WrongSenderPing(t *testing.T) {
 	future := m.Create(req)
 
 	resp := newPacket()
-	resp.Type = types.Ping
+	resp.SetResponse(&packet.Ping{})
 
 	require.False(t, shouldProcessPacket(future, resp))
 }

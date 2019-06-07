@@ -25,8 +25,11 @@ import (
 
 type Dependencies struct {
 	FetchJet            func(*FetchJet)
+	CheckJet            func(*CheckJet)
 	WaitHot             func(*WaitHot)
+	WaitHotWM           func(*WaitHotWM)
 	GetIndex            func(*GetIndex)
+	GetIndexWM          func(*GetIndexWM)
 	SendObject          func(*SendObject)
 	GetCode             func(*GetCode)
 	GetRequest          func(*GetRequest)
@@ -39,6 +42,9 @@ type Dependencies struct {
 	GetJet              func(*GetJet)
 	GetChildren         func(*GetChildren)
 	HotData             func(*HotData)
+	PassState           func(*PassState)
+	CalculateID         func(*CalculateID)
+	SetCode             func(*SetCode)
 }
 
 type ReturnReply struct {

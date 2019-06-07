@@ -100,12 +100,17 @@ func GetResponseBody(url string, postP PostParams) ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "[ getResponseBody ] Problem with sending request")
 	}
+
+	if postResp == nil {
+		return nil, errors.Wrap(err, "[ getResponseBody ] Reponse is nil")
+	}
+
+	defer postResp.Body.Close()
 	if http.StatusOK != postResp.StatusCode {
 		return nil, errors.New("[ getResponseBody ] Bad http response code: " + strconv.Itoa(postResp.StatusCode))
 	}
 
 	body, err := ioutil.ReadAll(postResp.Body)
-	defer postResp.Body.Close()
 	if err != nil {
 		return nil, errors.Wrap(err, "[ getResponseBody ] Problem with reading body")
 	}
@@ -137,8 +142,11 @@ func GetSeed(url string) (string, error) {
 	if res == nil {
 		return "", errors.New("[ getSeed ] Field 'result' is nil")
 	}
+	if len(seedResp.Result.Seed) == 0 {
+		return "", errors.New("[ getSeed ] Field seed is empty")
+	}
 
-	return res.Seed, nil
+	return seedResp.Result.Seed, nil
 }
 
 // SendWithSeed sends request with known seed
@@ -248,12 +256,8 @@ func Info(url string) (*InfoResponse, error) {
 	if infoResp.Error != nil {
 		return nil, errors.New("[ Info ] Field 'error' is not nil: " + fmt.Sprint(infoResp.Error))
 	}
-	res := &infoResp.Result
-	if res == nil {
-		return nil, errors.New("[ Info ] Field 'result' is nil")
-	}
 
-	return res, nil
+	return &infoResp.Result, nil
 }
 
 // Status makes rpc request to info.Status method and extracts it
@@ -274,10 +278,28 @@ func Status(url string) (*StatusResponse, error) {
 	if statusResp.Error != nil {
 		return nil, errors.New("[ Status ] Field 'error' is not nil: " + fmt.Sprint(statusResp.Error))
 	}
-	res := &statusResp.Result
-	if res == nil {
-		return nil, errors.New("[ Status ] Field 'result' is nil")
+
+	return &statusResp.Result, nil
+}
+
+// LogOff rpc request turns network state to NoNetwork to initiate reconnect sequence.
+func LogOff(url string) (*StatusResponse, error) {
+	params := getDefaultRPCParams("status.LogOff")
+
+	body, err := GetResponseBody(url+"/rpc", params)
+	if err != nil {
+		return nil, errors.Wrap(err, "[ Status ]")
 	}
 
-	return res, nil
+	statusResp := rpcStatusResponse{}
+
+	err = json.Unmarshal(body, &statusResp)
+	if err != nil {
+		return nil, errors.Wrap(err, "[ Status ] Can't unmarshal")
+	}
+	if statusResp.Error != nil {
+		return nil, errors.New("[ Status ] Field 'error' is not nil: " + fmt.Sprint(statusResp.Error))
+	}
+
+	return &statusResp.Result, nil
 }

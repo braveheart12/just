@@ -18,27 +18,19 @@ package artifactmanager
 
 import (
 	"context"
-	"fmt"
-	"time"
-
-	"github.com/insolar/insolar/insolar/flow/dispatcher"
-	"github.com/insolar/insolar/ledger/light/handle"
-	"github.com/pkg/errors"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/tag"
 
 	"github.com/insolar/insolar/configuration"
 	"github.com/insolar/insolar/insolar"
+	wbus "github.com/insolar/insolar/insolar/bus"
 	"github.com/insolar/insolar/insolar/flow"
 	"github.com/insolar/insolar/insolar/flow/bus"
+	"github.com/insolar/insolar/insolar/flow/dispatcher"
 	"github.com/insolar/insolar/insolar/jet"
-	"github.com/insolar/insolar/insolar/message"
 	"github.com/insolar/insolar/insolar/node"
 	"github.com/insolar/insolar/insolar/reply"
-	"github.com/insolar/insolar/instrumentation/inslogger"
-	"github.com/insolar/insolar/instrumentation/insmetrics"
 	"github.com/insolar/insolar/ledger/blob"
 	"github.com/insolar/insolar/ledger/drop"
+	"github.com/insolar/insolar/ledger/light/handle"
 	"github.com/insolar/insolar/ledger/light/hot"
 	"github.com/insolar/insolar/ledger/light/proc"
 	"github.com/insolar/insolar/ledger/light/recentstorage"
@@ -70,14 +62,16 @@ type MessageHandler struct {
 	HotDataWaiter hot.JetWaiter   `inject:""`
 	JetReleaser   hot.JetReleaser `inject:""`
 
+	WriteAccessor hot.WriteAccessor
+
 	LifelineIndex         object.LifelineIndex
 	IndexBucketModifier   object.IndexBucketModifier
 	LifelineStateModifier object.LifelineStateModifier
 
 	conf           *configuration.Ledger
-	middleware     *middleware
 	jetTreeUpdater jet.Fetcher
 
+	Sender         wbus.Sender
 	FlowDispatcher *dispatcher.Dispatcher
 	handlers       map[insolar.MessageType]insolar.MessageHandler
 }
@@ -115,30 +109,52 @@ func NewMessageHandler(
 			p.Dep.Coordinator = h.JetCoordinator
 			p.Dep.Bus = h.Bus
 		},
+		CheckJet: func(p *proc.CheckJet) {
+			p.Dep.JetAccessor = h.JetStorage
+			p.Dep.Coordinator = h.JetCoordinator
+			p.Dep.JetFetcher = h.jetTreeUpdater
+			p.Dep.Sender = h.Sender
+		},
+		WaitHotWM: func(p *proc.WaitHotWM) {
+			p.Dep.Waiter = h.HotDataWaiter
+			p.Dep.Sender = h.Sender
+		},
+		GetIndexWM: func(p *proc.GetIndexWM) {
+			p.Dep.IndexState = h.LifelineStateModifier
+			p.Dep.Locker = h.IDLocker
+			p.Dep.Index = h.LifelineIndex
+			p.Dep.Coordinator = h.JetCoordinator
+			p.Dep.Bus = h.Bus
+			p.Dep.Sender = h.Sender
+		},
 		SetRecord: func(p *proc.SetRecord) {
 			p.Dep.RecentStorageProvider = h.RecentStorageProvider
 			p.Dep.RecordModifier = h.RecordModifier
 			p.Dep.PCS = h.PCS
 			p.Dep.PendingRequestsLimit = h.conf.PendingRequestsLimit
+			p.Dep.WriteAccessor = h.WriteAccessor
 		},
 		SetBlob: func(p *proc.SetBlob) {
 			p.Dep.BlobAccessor = h.BlobAccessor
 			p.Dep.BlobModifier = h.BlobModifier
-			p.Dep.PlatformCryptographyScheme = h.PCS
+			p.Dep.PCS = h.PCS
+			p.Dep.WriteAccessor = h.WriteAccessor
 		},
 		SendObject: func(p *proc.SendObject) {
 			p.Dep.Jets = h.JetStorage
 			p.Dep.Blobs = h.Blobs
 			p.Dep.Coordinator = h.JetCoordinator
-			p.Dep.JetUpdater = h.jetTreeUpdater
+			p.Dep.JetFetcher = h.jetTreeUpdater
 			p.Dep.Bus = h.Bus
 			p.Dep.RecordAccessor = h.RecordAccessor
+			p.Dep.Sender = h.Sender
 		},
 		GetCode: func(p *proc.GetCode) {
-			p.Dep.Bus = h.Bus
 			p.Dep.RecordAccessor = h.RecordAccessor
 			p.Dep.Coordinator = h.JetCoordinator
 			p.Dep.BlobAccessor = h.BlobAccessor
+			p.Dep.JetFetcher = h.jetTreeUpdater
+			p.Dep.Sender = h.Sender
 		},
 		GetRequest: func(p *proc.GetRequest) {
 			p.Dep.RecordAccessor = h.RecordAccessor
@@ -153,6 +169,7 @@ func NewMessageHandler(
 			p.Dep.IDLocker = h.IDLocker
 			p.Dep.LifelineStateModifier = h.LifelineStateModifier
 			p.Dep.LifelineIndex = h.LifelineIndex
+			p.Dep.WriteAccessor = h.WriteAccessor
 		},
 		GetChildren: func(p *proc.GetChildren) {
 			p.Dep.Coordinator = h.JetCoordinator
@@ -187,13 +204,21 @@ func NewMessageHandler(
 			p.Dep.JetFetcher = h.jetTreeUpdater
 			p.Dep.JetReleaser = h.JetReleaser
 		},
+		PassState: func(p *proc.PassState) {
+			p.Dep.Blobs = h.BlobAccessor
+			p.Dep.Sender = h.Sender
+			p.Dep.Records = h.RecordAccessor
+		},
+		CalculateID: func(p *proc.CalculateID) {
+			p.Dep(h.PCS)
+		},
+		SetCode: func(p *proc.SetCode) {
+			p.Dep(h.WriteAccessor, h.RecordModifier, h.BlobModifier, h.PCS, h.Sender)
+		},
 	}
 
 	initHandle := func(msg bus.Message) *handle.Init {
-		return &handle.Init{
-			Dep:     dep,
-			Message: msg,
-		}
+		return handle.NewInit(dep, h.Sender, msg)
 	}
 
 	h.FlowDispatcher = dispatcher.NewDispatcher(func(msg bus.Message) flow.Handle {
@@ -204,43 +229,10 @@ func NewMessageHandler(
 	return h
 }
 
-func instrumentHandler(name string) Handler {
-	return func(handler insolar.MessageHandler) insolar.MessageHandler {
-		return func(ctx context.Context, p insolar.Parcel) (insolar.Reply, error) {
-			inslog := inslogger.FromContext(ctx)
-			start := time.Now()
-			code := "2xx"
-			ctx = insmetrics.InsertTag(ctx, tagMethod, name)
-
-			repl, err := handler(ctx, p)
-
-			latency := time.Since(start)
-			if err != nil {
-				code = "5xx"
-				inslog.Errorf("AM's handler %v returns error: %v", name, err)
-			}
-			inslog.Debugf("measured time of AM method %v is %v", name, latency)
-
-			ctx = insmetrics.ChangeTags(
-				ctx,
-				tag.Insert(tagMethod, name),
-				tag.Insert(tagResult, code),
-			)
-			stats.Record(ctx, statCalls.M(1), statLatency.M(latency.Nanoseconds()/1e6))
-
-			return repl, err
-		}
-	}
-}
-
 // Init initializes handlers and middleware.
 func (h *MessageHandler) Init(ctx context.Context) error {
-	m := newMiddleware(h)
-	h.middleware = m
-
 	h.jetTreeUpdater = jet.NewFetcher(h.Nodes, h.JetStorage, h.Bus, h.JetCoordinator)
-
-	h.setHandlersForLight(m)
+	h.setHandlersForLight()
 
 	return nil
 }
@@ -249,7 +241,7 @@ func (h *MessageHandler) OnPulse(ctx context.Context, pn insolar.Pulse) {
 	h.FlowDispatcher.ChangePulse(ctx, pn)
 }
 
-func (h *MessageHandler) setHandlersForLight(m *middleware) {
+func (h *MessageHandler) setHandlersForLight() {
 	// Generic.
 
 	h.Bus.MustRegister(insolar.TypeGetCode, h.FlowDispatcher.WrapBusHandle)
@@ -273,32 +265,4 @@ func (h *MessageHandler) setHandlersForLight(m *middleware) {
 
 func (h *MessageHandler) handleValidateRecord(ctx context.Context, parcel insolar.Parcel) (insolar.Reply, error) {
 	return &reply.OK{}, nil
-}
-
-func (h *MessageHandler) saveIndexFromHeavy(
-	ctx context.Context, parcelPN insolar.PulseNumber, jetID insolar.ID, obj insolar.Reference, heavy *insolar.Reference,
-) (object.Lifeline, error) {
-	genericReply, err := h.Bus.Send(ctx, &message.GetObjectIndex{
-		Object: obj,
-	}, &insolar.MessageSendOptions{
-		Receiver: heavy,
-	})
-	if err != nil {
-		return object.Lifeline{}, errors.Wrap(err, "failed to send")
-	}
-	rep, ok := genericReply.(*reply.ObjectIndex)
-	if !ok {
-		return object.Lifeline{}, fmt.Errorf("failed to fetch object index: unexpected reply type %T (reply=%+v)", genericReply, genericReply)
-	}
-	idx, err := object.DecodeIndex(rep.Index)
-	if err != nil {
-		return object.Lifeline{}, errors.Wrap(err, "failed to decode")
-	}
-
-	idx.JetID = insolar.JetID(jetID)
-	err = h.LifelineIndex.Set(ctx, parcelPN, *obj.Record(), idx)
-	if err != nil {
-		return object.Lifeline{}, errors.Wrap(err, "failed to save")
-	}
-	return idx, nil
 }

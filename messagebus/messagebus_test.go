@@ -112,8 +112,6 @@ func prepare(t *testing.T, ctx context.Context, currentPulse int, msgPulse int) 
 	}
 	parcel.MessageMock.Return(&message.GetObject{})
 
-	mb.Unlock(ctx)
-
 	return mb, ps, parcel, expectedRef
 }
 
@@ -213,7 +211,7 @@ func TestMessageBus_createWatermillMessage(t *testing.T) {
 		Msg: &message.GetObject{},
 	}
 
-	msg := mb.createWatermillMessage(ctx, parcel, nil, pulse)
+	msg := mb.createWatermillMessage(ctx, parcel, pulse)
 
 	require.NotNil(t, msg)
 	require.NotNil(t, msg.Payload)

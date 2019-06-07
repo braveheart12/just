@@ -54,16 +54,16 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/insolar/insolar/instrumentation/instracer"
-	"github.com/insolar/insolar/log"
-	"github.com/pkg/errors"
-
 	"github.com/insolar/insolar/component"
 	"github.com/insolar/insolar/insolar"
+	"github.com/insolar/insolar/insolar/pulse"
+	"github.com/insolar/insolar/instrumentation/inslogger"
+	"github.com/insolar/insolar/instrumentation/instracer"
 	"github.com/insolar/insolar/network"
 	"github.com/insolar/insolar/network/hostnetwork/packet"
 	"github.com/insolar/insolar/network/hostnetwork/packet/types"
 	"github.com/insolar/insolar/pulsar"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -92,56 +92,65 @@ func (pc *pulseController) Init(ctx context.Context) error {
 	return nil
 }
 
-func (pc *pulseController) processPulse(ctx context.Context, request network.Request) (network.Response, error) {
-	data := request.GetData().(*packet.RequestPulse)
-	verified, err := pc.verifyPulseSign(data.Pulse)
+func (pc *pulseController) processPulse(ctx context.Context, request network.Packet) (network.Packet, error) {
+	if request.GetRequest() == nil || request.GetRequest().GetPulse() == nil {
+		return nil, errors.Errorf("process pulse: got invalid protobuf request message: %s", request)
+	}
+
+	data := request.GetRequest().GetPulse()
+	pulse := *pulse.FromProto(data.Pulse)
+	err := pc.verifyPulseSign(pulse)
 	if err != nil {
-		return nil, errors.Wrap(err, "[ pulseController ] processPulse: error to verify a pulse sign")
+		return nil, errors.Wrap(err, "[ pulseController ] processPulse: failed to verify pulse")
 	}
-	if !verified {
-		return nil, errors.New("[ pulseController ] processPulse: failed to verify a pulse sign")
-	}
+
+	inslog := inslogger.FromContext(ctx)
 	// if we are a joiner node, we should receive pulse from phase1 packet and ignore pulse from pulsar
 	if !pc.NodeKeeper.GetConsensusInfo().IsJoiner() {
 		// Because we want to save our trace-context from a pulsar node
 		// We fetch TraceSpanData from msg and set a trace id and other stuff to current context
-		parent := instracer.MustDeserialize(data.TraceSpanData)
-		newCtx := instracer.WithParentSpan(context.Background(), parent)
-		go pc.PulseHandler.HandlePulse(newCtx, data.Pulse)
+		newCtx := context.Background()
+		parent, err := instracer.Deserialize(data.TraceSpanData)
+		if err != nil {
+			inslog.Errorf("failed to deserialize trace spans data on pulse process: %v", err)
+		} else {
+			newCtx = instracer.WithParentSpan(newCtx, parent)
+		}
+		go pc.PulseHandler.HandlePulse(newCtx, pulse)
 	} else {
-		log.Debugf("Ignore pulse %v from pulsar, waiting for consensus phase1 packet", data.Pulse)
+		inslog.Debugf("Ignore pulse %v from pulsar, waiting for consensus phase1 packet", data.Pulse)
 		skipped := atomic.AddUint32(&pc.skippedPulses, 1)
 		if skipped >= skippedPulsesLimit {
 			// we definitely failed to receive pulse via phase1 packet and should exit
 			pc.TerminationHandler.Abort("Failed to receive phase1 packet with pulse during bootstrap")
 		}
 	}
-	return pc.Network.BuildResponse(ctx, request, &packet.ResponsePulse{Success: true, Error: ""}), nil
+	return pc.Network.BuildResponse(ctx, request, &packet.BasicResponse{Success: true, Error: ""}), nil
 }
 
-func (pc *pulseController) verifyPulseSign(pulse insolar.Pulse) (bool, error) {
+func (pc *pulseController) verifyPulseSign(pulse insolar.Pulse) error {
 	hashProvider := pc.CryptographyScheme.IntegrityHasher()
 	if len(pulse.Signs) == 0 {
-		return false, errors.New("[ verifyPulseSign ] received empty pulse signs")
+		return errors.New("received empty pulse signs")
 	}
 	for _, psc := range pulse.Signs {
 		payload := pulsar.PulseSenderConfirmationPayload{PulseSenderConfirmation: psc}
 		hash, err := payload.Hash(hashProvider)
 		if err != nil {
-			return false, errors.Wrap(err, "[ verifyPulseSign ] error to get a hash from pulse payload")
+			return errors.Wrap(err, "failed to get hash from pulse payload")
 		}
 		key, err := pc.KeyProcessor.ImportPublicKeyPEM([]byte(psc.ChosenPublicKey))
 		if err != nil {
-			return false, errors.Wrap(err, "[ verifyPulseSign ] error to import a public key")
+			return errors.Wrap(err, "failed to import public key")
 		}
 
 		verified := pc.CryptographyService.Verify(key, insolar.SignatureFromBytes(psc.Signature), hash)
 
 		if !verified {
-			return false, errors.New("[ verifyPulseSign ] error to verify a pulse")
+			return errors.New("cryptographic signature verification failed")
 		}
 	}
-	return true, nil
+	return nil
 }
 
 func NewPulseController() PulseController {

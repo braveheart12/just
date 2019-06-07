@@ -64,7 +64,7 @@ import (
 	"github.com/insolar/insolar/network/consensus/packets"
 	"github.com/insolar/insolar/network/merkle"
 	"github.com/insolar/insolar/platformpolicy"
-	"github.com/jbenet/go-base58"
+	base58 "github.com/jbenet/go-base58"
 	"github.com/pkg/errors"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/tag"
@@ -96,10 +96,12 @@ func NewFirstPhase() FirstPhase {
 }
 
 type FirstPhaseImpl struct {
-	Calculator   merkle.Calculator           `inject:""`
-	Communicator Communicator                `inject:""`
-	Cryptography insolar.CryptographyService `inject:""`
-	NodeKeeper   network.NodeKeeper          `inject:""`
+	Calculator         merkle.Calculator           `inject:""`
+	Communicator       Communicator                `inject:""`
+	Cryptography       insolar.CryptographyService `inject:""`
+	NodeKeeper         network.NodeKeeper          `inject:""`
+	CertificateManager insolar.CertificateManager  `inject:""`
+	Gatewayer          network.Gatewayer           `inject:""`
 }
 
 // Execute do first phase
@@ -158,7 +160,10 @@ func (fp *FirstPhaseImpl) Execute(ctx context.Context, pulse *insolar.Pulse) (*F
 	}
 	log.Infof("[ NET Consensus phase-1 ] Phase1Packet claims count: %d", len(packet.GetClaims()))
 
-	activeNodes := fp.NodeKeeper.GetAccessor().GetActiveNodes()
+	activeNodes := fp.Gatewayer.Gateway().Auther().FilterJoinerNodes(
+		fp.CertificateManager.GetCertificate(),
+		fp.NodeKeeper.GetAccessor().GetActiveNodes(),
+	)
 	resultPackets, err := fp.Communicator.ExchangePhase1(ctx, originClaim, activeNodes, packet)
 	if err != nil {
 		return nil, errors.Wrap(err, "[ NET Consensus phase-1 ] Failed to exchange results")
@@ -278,7 +283,7 @@ func getNodeState(node insolar.NetworkNode, pulseNumber insolar.PulseNumber) pac
 
 func (fp *FirstPhaseImpl) checkPacketSignature(state *ConsensusState, packet *packets.Phase1Packet, recordRef insolar.Reference) error {
 	if state.ConsensusInfo.IsJoiner() {
-		return fp.checkPacketSignatureFromClaim(packet, recordRef)
+		return fp.checkPacketSignatureFromClaim(packet)
 	}
 
 	activeNode := fp.NodeKeeper.GetAccessor().GetActiveNode(recordRef)
@@ -289,7 +294,7 @@ func (fp *FirstPhaseImpl) checkPacketSignature(state *ConsensusState, packet *pa
 	return packet.Verify(fp.Cryptography, key)
 }
 
-func (fp *FirstPhaseImpl) checkPacketSignatureFromClaim(packet *packets.Phase1Packet, recordRef insolar.Reference) error {
+func (fp *FirstPhaseImpl) checkPacketSignatureFromClaim(packet *packets.Phase1Packet) error {
 	announceClaim := packet.GetAnnounceClaim()
 	if announceClaim == nil {
 		return errors.New("could not find announce claim")

@@ -264,7 +264,7 @@ func (nac *NodeAnnounceClaim) Deserialize(data io.Reader) error {
 	return nil
 }
 
-func (nac *NodeAnnounceClaim) Update(nodeJoinerID insolar.Reference, crypto insolar.CryptographyService) error {
+func (nac *NodeAnnounceClaim) Update(nodeJoinerID insolar.Reference, crypto insolar.Signer) error {
 	index, err := nac.BitSetMapper.RefToIndex(nodeJoinerID)
 	if err != nil {
 		return errors.Wrap(err, "[ NodeAnnounceClaim.Update ] failed to map joiner node ID to bitset index")
@@ -298,6 +298,25 @@ func (nlc *NodeLeaveClaim) Deserialize(data io.Reader) error {
 	err := binary.Read(data, defaultByteOrder, &nlc.ETA)
 	if err != nil {
 		return errors.Wrap(err, "[ NodeLeaveClaim.Deserialize ] failed to read a ETA")
+	}
+	return nil
+}
+
+// Serialize implements interface method
+func (cnc *ChangeNetworkClaim) Serialize() ([]byte, error) {
+	var result bytes.Buffer
+	err := binary.Write(&result, defaultByteOrder, []byte(cnc.Address))
+	if err != nil {
+		return nil, errors.Wrap(err, "[ ChangeNetworkClaim.Serialize ] failed to write ETA to buffer")
+	}
+	return result.Bytes(), nil
+}
+
+// Deserialize implements interface method
+func (cnc *ChangeNetworkClaim) Deserialize(data io.Reader) error {
+	err := binary.Read(data, defaultByteOrder, &cnc.Address)
+	if err != nil {
+		return errors.Wrap(err, "[ ChangeNetworkClaim.Deserialize ] failed to read a ETA")
 	}
 	return nil
 }
@@ -353,6 +372,8 @@ func parseReferendumClaim(data []byte) ([]ReferendumClaim, error) {
 			refClaim = &NodeLeaveClaim{}
 		case TypeNodeAnnounceClaim:
 			refClaim = &NodeAnnounceClaim{}
+		case TypeChangeNetworkClaim:
+			refClaim = &ChangeNetworkClaim{}
 		default:
 			return nil, errors.Wrap(err, "[ PacketHeader.parseReferendumClaim ] Unsupported claim type.")
 		}

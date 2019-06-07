@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/rpc"
 	"os"
 	"path"
@@ -109,7 +110,7 @@ func (s *LogicRunnerFuncSuite) PrepareLrAmCbPm() (insolar.LogicRunner, artifacts
 	lrSock := os.TempDir() + "/" + testutils.RandomString() + ".sock"
 	rundSock := os.TempDir() + "/" + testutils.RandomString() + ".sock"
 
-	rundCleaner, err := goplugintestutils.StartInsgorund(s.runnerBin, "unix", rundSock, "unix", lrSock, true)
+	rundCleaner, err := goplugintestutils.StartInsgorund(s.runnerBin, "unix", rundSock, "unix", lrSock, true, "")
 	s.NoError(err)
 
 	lr, err := NewLogicRunner(&configuration.LogicRunner{
@@ -218,7 +219,7 @@ func (s *LogicRunnerFuncSuite) incrementPulseHelper(
 	_, err = lr.(*LogicRunner).MessageBus.Send(
 		ctx,
 		&message.HotData{
-			Jet:             *insolar.NewReference(insolar.DomainID, insolar.ID(rootJetId)),
+			Jet:             *insolar.NewReference(insolar.ID(rootJetId)),
 			Drop:            drop.Drop{Pulse: 1, JetID: rootJetId},
 			PendingRequests: nil,
 			HotIndexes:      hotIndexes,
@@ -1221,13 +1222,30 @@ func (s *LogicRunnerFuncSuite) TestRootDomainContractError() {
 	resTransfer := member1.SignedCall(ctx, pm, *rootDomainRef, "Transfer", *cb.Prototypes["member"], []interface{}{1, member2Ref})
 	s.Nil(resTransfer)
 
+	var result interface{}
 	// Verify Member1 balance
-	res3 := root.SignedCall(ctx, pm, *rootDomainRef, "GetBalance", *cb.Prototypes["member"], []interface{}{member1Ref})
-	s.Equal(999999999, int(res3.(uint64)))
+	for i := 1; i <= 10; i++ {
+		result = root.SignedCall(ctx, pm, *rootDomainRef, "GetBalance", *cb.Prototypes["member"], []interface{}{member1Ref})
+		if result.(uint64) == 999999999 {
+			break
+		}
+		ms := time.Millisecond * 100 * time.Duration(math.Pow(2, float64(i)))
+		log.Debug("sleeping", ms)
+		time.Sleep(ms)
+	}
+	s.Equal(999999999, int(result.(uint64)))
 
 	// Verify Member2 balance
-	res4 := root.SignedCall(ctx, pm, *rootDomainRef, "GetBalance", *cb.Prototypes["member"], []interface{}{member2Ref})
-	s.Equal(1000000001, int(res4.(uint64)))
+	for i := 1; i <= 10; i++ {
+		result = root.SignedCall(ctx, pm, *rootDomainRef, "GetBalance", *cb.Prototypes["member"], []interface{}{member2Ref})
+		if result.(uint64) == 1000000001 {
+			break
+		}
+		ms := time.Millisecond * 100 * time.Duration(math.Pow(2, float64(i)))
+		log.Debug("sleeping", ms)
+		time.Sleep(ms)
+	}
+	s.Equal(1000000001, int(result.(uint64)))
 }
 
 func (s *LogicRunnerFuncSuite) TestFullValidationCycleError() {
@@ -1834,7 +1852,7 @@ func (r *One) EmptyMethod() (error) {
 	}
 
 	// emulate death
-	err = rlr.sock.Close()
+	err = rlr.rpc.Stop(ctx)
 	s.Require().NoError(err)
 
 	client, err := gp.Downstream(ctx)

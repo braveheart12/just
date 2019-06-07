@@ -22,6 +22,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -67,7 +68,7 @@ type MessageBus struct {
 	handlers     map[insolar.MessageType]insolar.MessageHandler
 	signmessages bool
 
-	counter uint64
+	counter int64
 	span    *trace.Span
 
 	globalLock                  sync.RWMutex
@@ -79,9 +80,10 @@ type MessageBus struct {
 func (mb *MessageBus) Acquire(ctx context.Context) {
 	ctx, span := instracer.StartSpan(ctx, "MessageBus.Acquire")
 	defer span.End()
-	inslogger.FromContext(ctx).Info("Call Acquire in MessageBus: ", mb.counter)
-	mb.counter = mb.counter + 1
-	if mb.counter-1 == 0 {
+
+	counter := atomic.AddInt64(&mb.counter, 1)
+	inslogger.FromContext(ctx).Info("Call Acquire in MessageBus: ", counter)
+	if counter == 1 {
 		inslogger.FromContext(ctx).Info("Lock MB")
 		ctx, mb.span = instracer.StartSpan(context.Background(), "GIL Lock (Lock MB)")
 		mb.Lock(ctx)
@@ -91,12 +93,13 @@ func (mb *MessageBus) Acquire(ctx context.Context) {
 func (mb *MessageBus) Release(ctx context.Context) {
 	ctx, span := instracer.StartSpan(ctx, "MessageBus.Release")
 	defer span.End()
-	inslogger.FromContext(ctx).Info("Call Release in MessageBus: ", mb.counter)
-	if mb.counter == 0 {
+
+	counter := atomic.AddInt64(&mb.counter, -1)
+	if counter < 0 {
 		panic("Trying to unlock without locking")
 	}
-	mb.counter = mb.counter - 1
-	if mb.counter == 0 {
+	inslogger.FromContext(ctx).Info("Call Release in MessageBus: ", counter)
+	if counter == 0 {
 		inslogger.FromContext(ctx).Info("Unlock MB")
 		mb.Unlock(ctx)
 		mb.span.End()
@@ -111,7 +114,6 @@ func NewMessageBus(config configuration.Configuration) (*MessageBus, error) {
 		signmessages:             config.Host.SignMessages,
 		NextPulseMessagePoolChan: make(chan interface{}),
 	}
-	mb.Acquire(context.Background())
 	return mb, nil
 }
 
@@ -155,7 +157,7 @@ func (mb *MessageBus) MustRegister(p insolar.MessageType, handler insolar.Messag
 	}
 }
 
-func (mb *MessageBus) createWatermillMessage(ctx context.Context, parcel insolar.Parcel, ops *insolar.MessageSendOptions, currentPulse insolar.Pulse) *watermillMsg.Message {
+func (mb *MessageBus) createWatermillMessage(_ context.Context, parcel insolar.Parcel, currentPulse insolar.Pulse) *watermillMsg.Message {
 	payload := message.ParcelToBytes(parcel)
 	wmMsg := watermillMsg.NewMessage(watermill.NewUUID(), payload)
 
@@ -204,13 +206,16 @@ func (mb *MessageBus) Send(ctx context.Context, msg insolar.Message, ops *insola
 
 	_, ok := transferredToWatermill[msg.Type()]
 	if ok {
-		wmMsg := mb.createWatermillMessage(ctx, parcel, ops, currentPulse)
+		wmMsg := mb.createWatermillMessage(ctx, parcel, currentPulse)
 		nodes, err := mb.getReceiverNodes(ctx, parcel, currentPulse, ops)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to calculate role")
 		}
 		res, done := mb.Sender.SendTarget(ctx, wmMsg, nodes[0])
-		repMsg := <-res
+		repMsg, ok := <-res
+		if !ok {
+			return nil, errors.New("can't get reply: reply channel was closed")
+		}
 		done()
 		return deserializePayload(repMsg)
 	}
@@ -220,6 +225,9 @@ func (mb *MessageBus) Send(ctx context.Context, msg insolar.Message, ops *insola
 }
 
 func deserializePayload(msg *watermillMsg.Message) (insolar.Reply, error) {
+	if msg == nil {
+		return nil, errors.New("can't deserialize payload of nil message")
+	}
 	meta := payload.Meta{}
 	err := meta.Unmarshal(msg.Payload)
 	if err != nil {
@@ -442,12 +450,9 @@ func (mb *MessageBus) handleParcelFromTheFuture(ctx context.Context, parcel inso
 
 // Deliver method calls LogicRunner.Execute on local host
 // this method is registered as RPC stub
-func (mb *MessageBus) deliver(ctx context.Context, args [][]byte) (result []byte, err error) {
+func (mb *MessageBus) deliver(ctx context.Context, args []byte) (result []byte, err error) {
 	inslogger.FromContext(ctx).Debug("MessageBus.deliver starts ...")
-	if len(args) < 1 {
-		return nil, errors.New("need exactly one argument when mb.deliver()")
-	}
-	parcel, err := message.DeserializeParcel(bytes.NewBuffer(args[0]))
+	parcel, err := message.DeserializeParcel(bytes.NewBuffer(args))
 	if err != nil {
 		return nil, err
 	}
@@ -485,7 +490,7 @@ func (mb *MessageBus) deliver(ctx context.Context, args [][]byte) (result []byte
 	return buf.Bytes(), nil
 }
 
-func (mb *MessageBus) checkParcel(ctx context.Context, parcel insolar.Parcel) error {
+func (mb *MessageBus) checkParcel(_ context.Context, parcel insolar.Parcel) error {
 	sender := parcel.GetSender()
 
 	if mb.signmessages {

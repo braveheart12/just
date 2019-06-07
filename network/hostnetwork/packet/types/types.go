@@ -54,8 +54,9 @@ package types
 type PacketType int
 
 const (
+	Unknown PacketType = iota
 	// Ping is packet type to ping remote node.
-	Ping PacketType = iota + 1
+	Ping
 	// RPC is packet type to execute RPC on a remote node.
 	RPC
 	// Cascade is packet type to send cascade message and execute RPC on each node of the cascade.
@@ -77,3 +78,6 @@ const (
 	// Disconnect is packet type to gracefully disconnect from network.
 	Disconnect
 )
+
+// RequestID is 64 bit unsigned int request id.
+type RequestID uint64
