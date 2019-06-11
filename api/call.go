@@ -20,15 +20,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/square/go-jose"
-
-	insolarjose "github.com/insolar/go-jose"
 	"github.com/insolar/insolar/api/seedmanager"
 	"github.com/insolar/insolar/application/extractor"
 	"github.com/insolar/insolar/insolar"
@@ -37,29 +32,36 @@ import (
 	"github.com/insolar/insolar/instrumentation/inslogger"
 	"github.com/insolar/insolar/instrumentation/instracer"
 	"github.com/insolar/insolar/metrics"
+	"github.com/pkg/errors"
 )
 
 // Request is a representation of request struct to api
 type Request struct {
-	PublicKey string  `json:"jwk"`
-	Signature string  `json:"jws"`
-	LogLevel  *string `json:"logLevel,omitempty"`
+	JsonRpc  string  `json:"jsonrpc"`
+	Id       int     `json:"id"`
+	Method   string  `json:"method"`
+	Params   Params  `json:"params"`
+	LogLevel *string `json:"logLevel,omitempty"`
 }
 
-// Data which is signed
-type SignedPayload struct {
-	Reference string `json:"reference"` // contract reference
-	Method    string
-
-	// method name
-	Params string `json:"params"` // json object
-	Seed   string `json:"seed"`
+type Params struct {
+	Seed       string `json:"seed"`
+	CallSite   string `json:"callSite"`
+	CallParams string `json:"callParams"`
+	Reference  string `json:"reference"`
+	Pem        string `json:"pem"`
 }
 
-type answer struct {
-	Error   string      `json:"error,omitempty"`
-	Result  interface{} `json:"result,omitempty"`
-	TraceID string      `json:"traceID,omitempty"`
+type Response struct {
+	JsonRpc string `json:"jsonrpc"`
+	Id      int    `json:"id"`
+	Error   string `json:"error,omitempty"`
+	Result  Result `json:"result,omitempty"`
+}
+
+type Result struct {
+	Data    interface{}
+	TraceID string `json:"traceID,omitempty"`
 }
 
 // UnmarshalRequest unmarshal request to api
@@ -109,16 +111,16 @@ func (ar *Runner) checkSeedString(_seed string) error {
 	return nil
 }
 
-func (ar *Runner) makeCall(ctx context.Context, signedPayload SignedPayload, request Request) (interface{}, error) {
-	ctx, span := instracer.StartSpan(ctx, "SendRequest "+signedPayload.Method)
+func (ar *Runner) makeCall(ctx context.Context, request Request, rawbody []byte, signature string, pulseTimeStamp int64) (interface{}, error) {
+	ctx, span := instracer.StartSpan(ctx, "SendRequest "+request.Method)
 	defer span.End()
 
-	reference, err := insolar.NewReferenceFromBase58(signedPayload.Reference)
+	reference, err := insolar.NewReferenceFromBase58(request.Params.Reference)
 	if err != nil {
 		return nil, errors.Wrap(err, "[ makeCall ] failed to parse signedPayload.Reference")
 	}
 
-	args, err := insolar.MarshalArgs(request.PublicKey, request.Signature)
+	args, err := insolar.MarshalArgs(rawbody, signature, pulseTimeStamp)
 	if err != nil {
 		return nil, errors.Wrap(err, "[ makeCall ] failed to marshal arguments")
 	}
@@ -147,7 +149,7 @@ func (ar *Runner) makeCall(ctx context.Context, signedPayload SignedPayload, req
 	return result, nil
 }
 
-func processError(err error, extraMsg string, resp *answer, insLog insolar.Logger) {
+func processError(err error, extraMsg string, resp *Response, insLog insolar.Logger) {
 	resp.Error = err.Error()
 	insLog.Error(errors.Wrapf(err, "[ CallHandler ] %s", extraMsg))
 }
@@ -160,9 +162,8 @@ func (ar *Runner) callHandler() func(http.ResponseWriter, *http.Request) {
 		ctx, span := instracer.StartSpan(ctx, "callHandler")
 		defer span.End()
 
-		// unmarshal jws
 		request := Request{}
-		resp := answer{}
+		resp := Response{}
 
 		defer func() {
 			res, err := json.MarshalIndent(resp, "", "    ")
@@ -176,20 +177,14 @@ func (ar *Runner) callHandler() func(http.ResponseWriter, *http.Request) {
 			}
 		}()
 
-		_, err := UnmarshalRequest(req, &request)
+		rawbody, err := UnmarshalRequest(req, &request)
 		if err != nil {
 			processError(err, "Can't unmarshal request", &resp, insLog)
 			return
 		}
 
-		signedPayload, err := verify(request.PublicKey, request.Signature)
-		if err != nil {
-			processError(err, "Can't verify signature", &resp, insLog)
-			return
-		}
-		fmt.Println("QWE!!")
-		fmt.Println(signedPayload)
-		fmt.Println(signedPayload.Reference)
+		resp.JsonRpc = request.JsonRpc
+		resp.Id = request.Id
 
 		startTime := time.Now()
 		defer func() {
@@ -197,10 +192,10 @@ func (ar *Runner) callHandler() func(http.ResponseWriter, *http.Request) {
 			if resp.Error != "" {
 				success = "fail"
 			}
-			metrics.APIContractExecutionTime.WithLabelValues(signedPayload.Method, success).Observe(time.Since(startTime).Seconds())
+			metrics.APIContractExecutionTime.WithLabelValues(request.Method, success).Observe(time.Since(startTime).Seconds())
 		}()
 
-		resp.TraceID = traceID
+		resp.Result.TraceID = traceID
 
 		insLog.Infof("[ callHandler ] Incoming request: %s", req.RequestURI)
 
@@ -213,16 +208,23 @@ func (ar *Runner) callHandler() func(http.ResponseWriter, *http.Request) {
 			ctx = inslogger.WithLoggerLevel(ctx, logLevelNumber)
 		}
 
-		err = ar.checkSeedString(signedPayload.Seed)
+		err = ar.checkSeedString(request.Params.Seed)
 		if err != nil {
 			processError(err, "Can't checkSeed", &resp, insLog)
 			return
 		}
 
+		//Signature: keyId="member-pub-key", algorithm="ecdsa", headers="digest", signature=<signatureString>
+		digest := req.Header.Get("Digest")
+		signature := req.Header.Get("Signature")
+
+		//TODO: check signature by digest if sha3(body) == digest
+
+		pulse, err := ar.PulseAccessor.Latest(ctx)
 		var result interface{}
 		ch := make(chan interface{}, 1)
 		go func() {
-			result, err = ar.makeCall(ctx, *signedPayload, request)
+			result, err = ar.makeCall(ctx, request, rawbody, signature, pulse.PulseTimestamp)
 			ch <- nil
 		}()
 		select {
@@ -232,7 +234,7 @@ func (ar *Runner) callHandler() func(http.ResponseWriter, *http.Request) {
 				processError(err, "Can't makeCall", &resp, insLog)
 				return
 			}
-			resp.Result = result
+			resp.Result.Data = result
 
 		case <-time.After(time.Duration(ar.cfg.Timeout) * time.Second):
 			resp.Error = "Messagebus timeout exceeded"
@@ -240,79 +242,6 @@ func (ar *Runner) callHandler() func(http.ResponseWriter, *http.Request) {
 
 		}
 
-		resp.Result = result
+		resp.Result.Data = result
 	}
-}
-
-// verify and get payload
-// return parsed payload, public key, signature and error
-func verify(publicKey string, _signature string) (*SignedPayload, error) {
-	type rawJSONWebKey struct {
-		Crv string `json:"crv,omitempty"`
-	}
-	var raw rawJSONWebKey
-	err := json.Unmarshal([]byte(publicKey), &raw)
-	if err != nil {
-		return nil, err
-	}
-	switch raw.Crv {
-	case "P-256K":
-		{
-			// unmarshal public key
-			public := insolarjose.JSONWebKey{}
-			err = public.UnmarshalJSON([]byte(publicKey))
-			if err != nil {
-				return nil, err
-			}
-			// parse jws token
-			signature, err := insolarjose.ParseSigned(_signature)
-			if err != nil {
-				return nil, err
-			}
-			var payloadRequest = SignedPayload{}
-
-			payload, err := signature.Verify(&public)
-			if err != nil {
-				return nil, err
-			}
-
-			err = json.Unmarshal(payload, &payloadRequest)
-			if err != nil {
-				return nil, err
-			}
-
-			return &payloadRequest, nil
-		}
-	case "P-256":
-		{
-			// unmarshal public key
-			public := jose.JSONWebKey{}
-			err = public.UnmarshalJSON([]byte(publicKey))
-			if err != nil {
-				return nil, err
-			}
-			// parse jws token
-			signature, err := jose.ParseSigned(_signature)
-			if err != nil {
-				return nil, err
-			}
-			var payloadRequest = SignedPayload{}
-
-			payload, err := signature.Verify(&public)
-			if err != nil {
-				return nil, err
-			}
-
-			err = json.Unmarshal(payload, &payloadRequest)
-			if err != nil {
-				return nil, err
-			}
-
-			return &payloadRequest, nil
-
-		}
-	default:
-		return nil, errors.Errorf("Unsupported key format")
-	}
-
 }

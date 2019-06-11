@@ -62,7 +62,7 @@ func NewInfoService(runner *Runner) *InfoService {
 //     Response structure:
 // 	{
 // 		"jsonrpc": "2.0",
-// 		"result": {
+// 		"Result": {
 // 			"RootDomain": str, // reference to RootDomain instance
 // 			"RootMember": str, // reference to RootMember instance
 // 			"NodeDomain": str, // reference to NodeDomain instance

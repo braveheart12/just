@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/insolar/insolar/platformpolicy"
-	"github.com/square/go-jose"
 	"io"
 	"os"
 
@@ -184,14 +183,10 @@ func createMember(sendURL string, userName string, serverLogLevel string) {
 		check("Problems with generating of private key:", err)
 	}
 
-	priv := jose.JSONWebKey{Key: privateKey}
-	privKeyStr, err := priv.MarshalJSON()
-	//privKeyStr, err := ks.ExportPrivateKeyPEM(privKey)
+	privKeyStr, err := ks.ExportPrivateKeyPEM(privateKey)
 	check("Problems with serialization of private key:", err)
 
-	pub := jose.JSONWebKey{Key: priv.Public()}
-	pubKeyStr, err := pub.MarshalJSON()
-	//pubKeyStr, err := ks.ExportPublicKeyPEM(ks.ExtractPublicKey(privKey))
+	pubKeyStr, err := ks.ExportPublicKeyPEM(ks.ExtractPublicKey(privateKey))
 	check("Problems with serialization of public key:", err)
 
 	cfg := mixedConfig{
@@ -206,8 +201,6 @@ func createMember(sendURL string, userName string, serverLogLevel string) {
 	check("Problems with creating user config:", err)
 
 	ctx := inslogger.ContextWithTrace(context.Background(), "insolarUtility")
-
-	//TODO: add strucutre
 
 	req := requester.RequestConfigJSON{
 		Params:   "",
@@ -252,25 +245,11 @@ func generateKeysPair() {
 
 	pubKeyStr, err := ks.ExportPublicKeyPEM(ks.ExtractPublicKey(privKey))
 	check("Problems with serialization of public key:", err)
-	//
-	// TODO: check curve
-	//privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	//check("Problems with generating of private key:", err)
-	//
-	//priv := jose.JSONWebKey{Key: privateKey}
-	//privbjs, err := priv.MarshalJSON()
-	//check("Problems with marshaling of private key:", err)
-	//
-	//pub := jose.JSONWebKey{Key: privateKey.Public()}
-	//pubbjs, err := pub.MarshalJSON()
-	//check("Problems with marshaling of public key:", err)
 	result, err := json.MarshalIndent(map[string]interface{}{
 		"private_key": string(privKeyStr),
 		"public_key":  string(pubKeyStr),
 	}, "", "    ")
 	check("Problems with marshaling keys:", err)
-
-	//data, err := jose.JSONWebKey.MarshalJSON(privateKey)
 
 	mustWrite(os.Stdout, string(result))
 }

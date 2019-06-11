@@ -23,9 +23,19 @@ import (
 	"github.com/insolar/insolar/logicrunner/goplugin/foundation"
 )
 
+type Request struct {
+	Params Params `json:"params"`
+}
+type Params struct {
+	Method     string `json:"callSite"`
+	CallParams string `json:"callParams"`
+	Reference  string `json:"reference"`
+	Pem        string `json:"pem"`
+}
+
 // PrototypeReference to prototype of this contract
 // error checking hides in generator
-var PrototypeReference, _ = insolar.NewReferenceFromBase58("11111GLo1hGQauZRz89Rp2Sq3444rDFcQiMZwXdZAy.11111111111111111111111111111111")
+var PrototypeReference, _ = insolar.NewReferenceFromBase58("11112vhoTC8Kwy6bDMRTrbRXme5ASPGQFSXnxsFnfT4.11111111111111111111111111111111")
 
 // Member holds proxy type
 type Member struct {

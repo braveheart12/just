@@ -22,7 +22,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
-	"github.com/square/go-jose"
+	"github.com/insolar/insolar/api"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -87,6 +87,8 @@ type SignedRequest struct {
 
 // GetResponseBody makes request and extracts body
 func GetResponseBody(url string, postP PostParams) ([]byte, error) {
+	//Signature: keyId="member-pub-key", algorithm="ecdsa", headers="digest", signature=<signatureString>
+	// TODO: add signature headers
 	jsonValue, err := json.Marshal(postP)
 	if err != nil {
 		return nil, errors.Wrap(err, "[ getResponseBody ] Problem with marshaling params")
@@ -172,32 +174,31 @@ func SendWithSeed(ctx context.Context, url string, userCfg *UserConfigJSON, reqC
 		return nil, errors.Wrap(err, "[ Send ] Failed marshal signed payload")
 	}
 	verboseInfo(ctx, "Signing request ...")
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: userCfg.privateKeyObject}, nil)
+	//signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: userCfg.privateKeyObject}, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "[ Send ] Problem with creating signer")
 	}
 
-	signature, err := signer.Sign(sp)
+	//signature, err := signer.Sign(sp)
 	if err != nil {
 		return nil, errors.Wrap(err, "[ Send ] Problem with signing request")
 	}
 	verboseInfo(ctx, "Signing request completed")
 
-	jws, err := signature.CompactSerialize()
+	//jws, err := signature.CompactSerialize()
 
 	key, ok := userCfg.privateKeyObject.(*ecdsa.PrivateKey)
 	if !ok {
 		return nil, errors.Wrap(err, "[ Send ] failed to cast private")
 	}
 
-	jwk := jose.JSONWebKey{Key: key.Public()}
-	jwkjs, err := jwk.MarshalJSON()
+	//jwk := jose.JSONWebKey{Key: key.Public()}
+	//jwkjs, err := jwk.MarshalJSON()
 	if err != nil {
 		return nil, errors.Wrap(err, "[ Send ] JWK marshal error")
 	}
-	postParams := PostParams{
-		"jwk": string(jwkjs),
-		"jws": jws,
+	postParams := api.Request{
+		JsonRpc: "2.0",
 	}
 
 	if reqCfg.LogLevel != nil {

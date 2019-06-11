@@ -50,14 +50,43 @@ func (g *certGen) loadKeys() {
 	g.pubKey = g.keyProcessor.ExtractPublicKey(g.privKey)
 }
 
-type RegisterResult struct {
-	Error   string `json:"error"`
-	Result  string `json:"result"`
-	TraceID string `json:"traceID"`
+//type ResponseResult struct {
+//	Error   string `json:"error"`
+//	Result  string `json:"result"`
+//	TraceID string `json:"traceID"`
+//}
+
+type Request struct {
+	JsonRpc  string  `json:"jsonrpc"`
+	Id       int     `json:"id"`
+	Method   string  `json:"method"`
+	Params   Params  `json:"params"`
+	LogLevel *string `json:"logLevel,omitempty"`
 }
 
+type Params struct {
+	Seed       string `json:"seed"`
+	CallSite   string `json:"callSite"`
+	CallParams string `json:"callParams"`
+	Reference  string `json:"reference"`
+	Pem        string `json:"pem"`
+}
+
+type ResponseResult struct {
+	JsonRpc string `json:"jsonrpc"`
+	Id      int    `json:"id"`
+	Error   string `json:"error,omitempty"`
+	Result  Result `json:"result,omitempty"`
+}
+
+type Result struct {
+	Data    interface{} `json:"data,omitempty"`
+	TraceID string      `json:"traceID,omitempty"`
+}
+
+
 func extractReference(response []byte, requestTypeMsg string) insolar.Reference {
-	r := RegisterResult{}
+	r := ResponseResult{}
 	err := json.Unmarshal(response, &r)
 	checkError(fmt.Sprintf("Failed to parse response from '%s' node request", requestTypeMsg), err)
 	if verbose {

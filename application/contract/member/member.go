@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/insolar/go-jose"
 	"github.com/insolar/insolar/application/contract/member/helper"
 	"github.com/insolar/insolar/application/contract/member/signer"
 	"github.com/insolar/insolar/application/proxy/deposit"
@@ -44,6 +43,17 @@ type Member struct {
 	Name      string
 	EthAddr   string
 	PublicKey string
+}
+
+type Request struct {
+	Params Params `json:"params"`
+}
+
+type Params struct {
+	Method     string `json:"callSite"`
+	CallParams string `json:"callParams"`
+	Reference  string `json:"reference"`
+	Pem        string `json:"pem"`
 }
 
 // Getters and setters
@@ -76,68 +86,54 @@ func NewBasicMember(name string, key string) (*Member, error) {
 }
 
 // Verify signature and unmarshal request payload and public key
-func verifyAndUnmarshal(signedRequest []byte) (*signer.SignedPayload, *jose.JSONWebKey, error) {
-	var jwks string
-	var jwss string
+func verifyAndUnmarshal(rawrequest []byte) (*Params, error) {
+	var rawbody []byte
+	var signature string
+	var digest string
 
-	err := signer.UnmarshalParams(signedRequest, &jwks, &jwss)
+	err := signer.UnmarshalParams(rawrequest, &rawbody, &signature, &digest)
 	if err != nil {
-		return nil, nil, fmt.Errorf("[ VerifyAndUnmarshal ] Failed to unmarshal params: %s", err.Error())
+		return nil, fmt.Errorf("[ VerifyAndUnmarshal ] Failed to unmarshal params: %s", err.Error())
 	}
 
-	jwk := jose.JSONWebKey{}
-	err = jwk.UnmarshalJSON([]byte(jwks))
+	request := Request{}
+	err = json.Unmarshal(rawbody, &request)
 	if err != nil {
-		return nil, nil, fmt.Errorf("[ VerifyAndUnmarshal ] Failed to unmarshal json jwks: %s", err.Error())
-	}
-	jws, err := jose.ParseSigned(jwss)
-	if err != nil {
-		return nil, nil, fmt.Errorf("[ VerifyAndUnmarshal ] Failed to parse signed jwss: %s", err.Error())
+		return nil, fmt.Errorf("[ VerifyAndUnmarshal ] Failed to unmarshal json request: %s", err.Error())
 	}
 
-	payload, err := jws.Verify(jwk)
-	if err != nil {
-		return nil, nil, fmt.Errorf("[ VerifyAndUnmarshal ] Incorrect signature: %s", err.Error())
-	}
-
-	var payloadRequest = signer.SignedPayload{}
-	err = json.Unmarshal(payload, &payloadRequest)
-	if err != nil {
-		return nil, nil, fmt.Errorf("[ VerifyAndUnmarshal ] Failed to unmarshal payload: %s", err.Error())
-	}
-
-	return &payloadRequest, &jwk, nil
+	return &request.Params, nil
 }
 
 // Call method for authorized calls
 func (m *Member) Call(rootDomainRef insolar.Reference, signedRequest []byte) (interface{}, error) {
 
 	// Verify signature
-	payload, public, err := verifyAndUnmarshal(signedRequest)
+	payload, err := verifyAndUnmarshal(signedRequest)
 	if err != nil {
 		return nil, fmt.Errorf("[ Call ] Failed to verify signature and compare public key: %s", err.Error())
 	}
 
 	switch payload.Method {
 	case "RegisterNode":
-		return m.registerNodeCall(rootDomainRef, []byte(payload.Params))
+		return m.registerNodeCall(rootDomainRef, []byte(payload.CallParams))
 	case "GetNodeRef":
-		return m.getNodeRefCall(rootDomainRef, []byte(payload.Params))
+		return m.getNodeRefCall(rootDomainRef, []byte(payload.CallParams))
 	}
 
 	switch payload.Method {
 	case "AddBurnAddresses":
-		return m.AddBurnAddressesCall(rootDomainRef, []byte(payload.Params))
+		return m.AddBurnAddressesCall(rootDomainRef, []byte(payload.CallParams))
 	case "CreateMember":
-		return m.createMemberCall(rootDomainRef, []byte(payload.Params), *public)
+		return m.createMemberCall(rootDomainRef, []byte(payload.CallParams), payload.Pem)
 	case "GetBalance":
-		return m.getBalanceCall(rootDomainRef, []byte(payload.Params))
+		return m.getBalanceCall(rootDomainRef, []byte(payload.CallParams))
 	case "GetMyBalance":
 		return m.getMyBalanceCall()
 	case "Transfer":
-		return m.transferCall([]byte(payload.Params))
+		return m.transferCall([]byte(payload.CallParams))
 	case "Migration":
-		return m.migrationCall(rootDomainRef, []byte(payload.Params))
+		return m.migrationCall(rootDomainRef, []byte(payload.CallParams))
 	}
 
 	return nil, &foundation.Error{S: "[ Call ] Unknown method: '" + payload.Method + "'"}
@@ -197,23 +193,19 @@ func (mdAdminMember *Member) AddBurnAddressesCall(rdRef insolar.Reference, param
 
 	return nil, nil
 }
-func (m *Member) createMemberCall(rdRef insolar.Reference, params []byte, public jose.JSONWebKey) (interface{}, error) {
+func (m *Member) createMemberCall(rdRef insolar.Reference, params []byte, public string) (interface{}, error) {
 	type CreateMemberInput struct {
 		Name string `json:"name"`
 	}
 
-	key, err := public.MarshalJSON()
-	if err != nil {
-		return 0, fmt.Errorf("[ createMemberCall ] Failed marshal key: %s", err.Error())
-	}
 	input := CreateMemberInput{}
 
-	err = json.Unmarshal(params, &input)
+	err := json.Unmarshal(params, &input)
 	if err != nil {
 		return 0, fmt.Errorf("[ createMemberCall ] Failed unmarshal params: %s", err.Error())
 	}
 
-	return m.createMemberByKey(rdRef, string(key))
+	return m.createMemberByKey(rdRef, public)
 }
 func (caller *Member) getBalanceCall(rdRef insolar.Reference, params []byte) (interface{}, error) {
 	rootDomain := rootdomain.GetObject(rdRef)

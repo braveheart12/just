@@ -26,7 +26,7 @@ func TestUnmarshalUpload(t *testing.T) {
 	jsonResponse := `
 {
     "jsonrpc": "2.0",
-    "result": {
+    "Result": {
         "Test": "Test",
         "PrototypeRef": "6R46iNSizv7pzHrLiR8m1qtEPC9FvLtsdKoFV9w2r6V.11111111111111111111111111111111"
     },
@@ -35,13 +35,13 @@ func TestUnmarshalUpload(t *testing.T) {
 	res := struct {
 		Version string      `json:"jsonrpc"`
 		ID      string      `json:"id"`
-		Result  UploadReply `json:"result"`
+		Result  UploadReply `json:"Result"`
 	}{}
 
 	expectedRes := struct {
 		Version string      `json:"jsonrpc"`
 		ID      string      `json:"id"`
-		Result  UploadReply `json:"result"`
+		Result  UploadReply `json:"Result"`
 	}{
 		Version: "2.0",
 		ID:      "",

@@ -56,7 +56,7 @@ func NewSeedService(runner *Runner) *SeedService {
 //     Response structure:
 // 	{
 // 		"jsonrpc": "2.0",
-// 		"result": {
+// 		"Result": {
 // 			"Seed": str, // correct seed for new Call request
 // 			"TraceID": str // traceID for request
 // 		},
