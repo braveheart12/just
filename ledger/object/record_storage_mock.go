@@ -21,12 +21,12 @@ import (
 type RecordStorageMock struct {
 	t minimock.Tester
 
-	ForIDFunc       func(p context.Context, p1 insolar.ID) (r record.Material, r1 error)
+	ForIDFunc       func(p context.Context, p1 insolar.ID) (r record.Store, r1 error)
 	ForIDCounter    uint64
 	ForIDPreCounter uint64
 	ForIDMock       mRecordStorageMockForID
 
-	SetFunc       func(p context.Context, p1 insolar.ID, p2 record.Material) (r error)
+	SetFunc       func(p context.Context, p1 insolar.ID, p2 record.Store) (r error)
 	SetCounter    uint64
 	SetPreCounter uint64
 	SetMock       mRecordStorageMockSet
@@ -63,7 +63,7 @@ type RecordStorageMockForIDInput struct {
 }
 
 type RecordStorageMockForIDResult struct {
-	r  record.Material
+	r  record.Store
 	r1 error
 }
 
@@ -80,7 +80,7 @@ func (m *mRecordStorageMockForID) Expect(p context.Context, p1 insolar.ID) *mRec
 }
 
 //Return specifies results of invocation of RecordStorage.ForID
-func (m *mRecordStorageMockForID) Return(r record.Material, r1 error) *RecordStorageMock {
+func (m *mRecordStorageMockForID) Return(r record.Store, r1 error) *RecordStorageMock {
 	m.mock.ForIDFunc = nil
 	m.expectationSeries = nil
 
@@ -102,12 +102,12 @@ func (m *mRecordStorageMockForID) ExpectOnce(p context.Context, p1 insolar.ID) *
 	return expectation
 }
 
-func (e *RecordStorageMockForIDExpectation) Return(r record.Material, r1 error) {
+func (e *RecordStorageMockForIDExpectation) Return(r record.Store, r1 error) {
 	e.result = &RecordStorageMockForIDResult{r, r1}
 }
 
 //Set uses given function f as a mock of RecordStorage.ForID method
-func (m *mRecordStorageMockForID) Set(f func(p context.Context, p1 insolar.ID) (r record.Material, r1 error)) *RecordStorageMock {
+func (m *mRecordStorageMockForID) Set(f func(p context.Context, p1 insolar.ID) (r record.Store, r1 error)) *RecordStorageMock {
 	m.mainExpectation = nil
 	m.expectationSeries = nil
 
@@ -116,7 +116,7 @@ func (m *mRecordStorageMockForID) Set(f func(p context.Context, p1 insolar.ID) (
 }
 
 //ForID implements github.com/insolar/insolar/ledger/object.RecordStorage interface
-func (m *RecordStorageMock) ForID(p context.Context, p1 insolar.ID) (r record.Material, r1 error) {
+func (m *RecordStorageMock) ForID(p context.Context, p1 insolar.ID) (r record.Store, r1 error) {
 	counter := atomic.AddUint64(&m.ForIDPreCounter, 1)
 	defer atomic.AddUint64(&m.ForIDCounter, 1)
 
@@ -211,7 +211,7 @@ type RecordStorageMockSetExpectation struct {
 type RecordStorageMockSetInput struct {
 	p  context.Context
 	p1 insolar.ID
-	p2 record.Material
+	p2 record.Store
 }
 
 type RecordStorageMockSetResult struct {
@@ -219,7 +219,7 @@ type RecordStorageMockSetResult struct {
 }
 
 //Expect specifies that invocation of RecordStorage.Set is expected from 1 to Infinity times
-func (m *mRecordStorageMockSet) Expect(p context.Context, p1 insolar.ID, p2 record.Material) *mRecordStorageMockSet {
+func (m *mRecordStorageMockSet) Expect(p context.Context, p1 insolar.ID, p2 record.Store) *mRecordStorageMockSet {
 	m.mock.SetFunc = nil
 	m.expectationSeries = nil
 
@@ -243,7 +243,7 @@ func (m *mRecordStorageMockSet) Return(r error) *RecordStorageMock {
 }
 
 //ExpectOnce specifies that invocation of RecordStorage.Set is expected once
-func (m *mRecordStorageMockSet) ExpectOnce(p context.Context, p1 insolar.ID, p2 record.Material) *RecordStorageMockSetExpectation {
+func (m *mRecordStorageMockSet) ExpectOnce(p context.Context, p1 insolar.ID, p2 record.Store) *RecordStorageMockSetExpectation {
 	m.mock.SetFunc = nil
 	m.mainExpectation = nil
 
@@ -258,7 +258,7 @@ func (e *RecordStorageMockSetExpectation) Return(r error) {
 }
 
 //Set uses given function f as a mock of RecordStorage.Set method
-func (m *mRecordStorageMockSet) Set(f func(p context.Context, p1 insolar.ID, p2 record.Material) (r error)) *RecordStorageMock {
+func (m *mRecordStorageMockSet) Set(f func(p context.Context, p1 insolar.ID, p2 record.Store) (r error)) *RecordStorageMock {
 	m.mainExpectation = nil
 	m.expectationSeries = nil
 
@@ -267,7 +267,7 @@ func (m *mRecordStorageMockSet) Set(f func(p context.Context, p1 insolar.ID, p2 
 }
 
 //Set implements github.com/insolar/insolar/ledger/object.RecordStorage interface
-func (m *RecordStorageMock) Set(p context.Context, p1 insolar.ID, p2 record.Material) (r error) {
+func (m *RecordStorageMock) Set(p context.Context, p1 insolar.ID, p2 record.Store) (r error) {
 	counter := atomic.AddUint64(&m.SetPreCounter, 1)
 	defer atomic.AddUint64(&m.SetCounter, 1)
 
