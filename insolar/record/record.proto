@@ -158,15 +158,12 @@ message Virtual {
         Deactivate Deactivate = 110;
         PendingFilament PendingFilament = 111;
     }
-
-    bytes Signature = 200;
 }
 
-message Material {
+message Store {
     int32 polymorph = 16;
 
-    Virtual Virtual = 20;
-    bytes JetID = 21 [(gogoproto.customtype) = "github.com/insolar/insolar/insolar.JetID", (gogoproto.nullable) = false];
+    bytes JetID = 20 [(gogoproto.customtype) = "github.com/insolar/insolar/insolar.JetID", (gogoproto.nullable) = false];
 
-    bytes Signature = 200;
+    Virtual Virtual = 30;
 }

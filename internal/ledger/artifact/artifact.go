@@ -283,15 +283,15 @@ func (m *Scope) DeployCode(
 	)
 }
 
-func (m *Scope) setRecord(ctx context.Context, rec record.Virtual) (*insolar.ID, error) {
-	hash := record.HashVirtual(m.PCS.ReferenceHasher(), rec)
+func (m *Scope) setRecord(ctx context.Context, v record.Virtual) (*insolar.ID, error) {
+	hash := record.HashVirtual(m.PCS.ReferenceHasher(), v)
 	id := insolar.NewID(m.PulseNumber, hash)
 
-	matRec := record.Material{
-		Virtual: &rec,
+	rec := record.Store{
+		Virtual: &v,
 		JetID:   insolar.ZeroJetID,
 	}
-	return id, m.RecordModifier.Set(ctx, *id, matRec)
+	return id, m.RecordModifier.Set(ctx, *id, rec)
 }
 
 func (m *Scope) setBlob(ctx context.Context, memory []byte) (*insolar.ID, error) {

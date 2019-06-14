@@ -276,7 +276,7 @@ func (i *InMemoryIndex) SetRequest(ctx context.Context, pn insolar.PulseNumber, 
 	hash := record.HashVirtual(i.pcs.ReferenceHasher(), pfv)
 	metaID := *insolar.NewID(pn, hash)
 
-	err := i.recordStorage.Set(ctx, metaID, record.Material{Virtual: &pfv})
+	err := i.recordStorage.Set(ctx, metaID, record.Store{Virtual: &pfv})
 	if err != nil {
 		return errors.Wrap(err, "failed to create a meta-record about pending request")
 	}
@@ -334,7 +334,7 @@ func (i *InMemoryIndex) SetResult(ctx context.Context, pn insolar.PulseNumber, o
 	hash := record.HashVirtual(i.pcs.ReferenceHasher(), pfv)
 	metaID := *insolar.NewID(pn, hash)
 
-	err := i.recordStorage.Set(ctx, metaID, record.Material{Virtual: &pfv})
+	err := i.recordStorage.Set(ctx, metaID, record.Store{Virtual: &pfv})
 	if err != nil {
 		return errors.Wrap(err, "failed to create a meta-record about pending request")
 	}
@@ -391,7 +391,7 @@ func (i *InMemoryIndex) SetFilament(ctx context.Context, pn insolar.PulseNumber,
 		recsIds[idx] = rec.MetaID
 
 		recV := record.Wrap(rec.Meta)
-		err := i.recordStorage.Set(ctx, rec.MetaID, record.Material{Virtual: &recV})
+		err := i.recordStorage.Set(ctx, rec.MetaID, record.Store{Virtual: &recV})
 		if err != nil {
 			return errors.Wrap(err, "filament update failed")
 		}

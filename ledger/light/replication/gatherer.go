@@ -110,7 +110,7 @@ func convertBlobs(blobs []blob.Blob) [][]byte {
 	return res
 }
 
-func convertRecords(ctx context.Context, records []record.Material) [][]byte {
+func convertRecords(ctx context.Context, records []record.Store) [][]byte {
 	res := make([][]byte, len(records))
 	for i, r := range records {
 		data, err := r.Marshal()

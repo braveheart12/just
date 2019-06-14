@@ -65,7 +65,7 @@ func NewSendObject(
 }
 
 func (p *SendObject) Proceed(ctx context.Context) error {
-	sendState := func(rec record.Material) error {
+	sendState := func(rec record.Store) error {
 		virtual := rec.Virtual
 		concrete := record.Unwrap(virtual)
 		state, ok := concrete.(record.State)

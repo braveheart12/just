@@ -624,7 +624,7 @@ func (s *handlerSuite) TestMessageHandler_HandleGetRequest() {
 	hash := record.HashVirtual(s.scheme.ReferenceHasher(), virtRec)
 	reqID := insolar.NewID(insolar.FirstPulseNumber, hash)
 
-	rec := record.Material{
+	rec := record.Store{
 		Virtual: &virtRec,
 		JetID:   insolar.JetID(jetID),
 	}

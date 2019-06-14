@@ -104,7 +104,7 @@ func storeRecords(
 	inslog := inslogger.FromContext(ctx)
 
 	for _, rawRec := range rawRecords {
-		rec := record.Material{}
+		rec := record.Store{}
 		err := rec.Unmarshal(rawRec)
 		if err != nil {
 			inslog.Error(err, "heavyserver: deserialize record failed")

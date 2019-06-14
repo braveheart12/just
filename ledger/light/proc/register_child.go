@@ -93,7 +93,7 @@ func (p *RegisterChild) process(ctx context.Context) error {
 
 	hash = record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
 	child := insolar.NewID(p.pulse, hash)
-	rec := record.Material{
+	rec := record.Store{
 		Virtual: &virtRec,
 		JetID:   p.jet,
 	}

@@ -226,15 +226,15 @@ func (m *client) GetCode(
 
 	switch p := pl.(type) {
 	case *payload.Code:
-		rec := record.Material{}
-		err := rec.Unmarshal(p.Record)
+		virtual := &record.Virtual{}
+		err := virtual.Unmarshal(p.Record)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to unmarshal record")
+			return nil, errors.Wrap(err, "failed to unmarshal code to virtual record")
 		}
-		virtual := record.Unwrap(rec.Virtual)
-		codeRecord, ok := virtual.(*record.Code)
+		rec := record.Unwrap(virtual)
+		codeRecord, ok := rec.(*record.Code)
 		if !ok {
-			return nil, errors.Wrapf(err, "unexpected record %T", virtual)
+			return nil, errors.Wrapf(err, "unexpected record %T", rec)
 		}
 		desc = &codeDescriptor{
 			ref:         code,
@@ -337,7 +337,7 @@ func (m *client) GetObject(
 		return nil, errors.New("no reply")
 	}
 
-	rec := record.Material{}
+	rec := record.Store{}
 	err = rec.Unmarshal(statePayload.Record)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal state")
@@ -832,14 +832,12 @@ func (m *client) RegisterResult(
 }
 
 // pulse returns current PulseNumber for artifact manager
-func (m *client) pulse(ctx context.Context) (pn insolar.PulseNumber, err error) {
-	pulse, err := m.PulseAccessor.Latest(ctx)
+func (m *client) pulse(ctx context.Context) (insolar.PulseNumber, error) {
+	p, err := m.PulseAccessor.Latest(ctx)
 	if err != nil {
-		return
+		return 0, err
 	}
-
-	pn = pulse.PulseNumber
-	return
+	return p.PulseNumber, nil
 }
 
 func (m *client) activateObject(

@@ -57,7 +57,7 @@ func NewGetCode(msg payload.Meta, codeID insolar.ID, pass bool) *GetCode {
 
 func (p *GetCode) Proceed(ctx context.Context) error {
 	logger := inslogger.FromContext(ctx)
-	sendCode := func(rec record.Material) error {
+	sendCode := func(rec record.Store) error {
 		virtual := record.Unwrap(rec.Virtual)
 		code, ok := virtual.(*record.Code)
 		if !ok {

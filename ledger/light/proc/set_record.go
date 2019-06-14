@@ -89,7 +89,7 @@ func (p *SetRecord) reply(ctx context.Context) bus.Reply {
 
 	hash = record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
 	id := insolar.NewID(flow.Pulse(ctx), hash)
-	rec := record.Material{
+	rec := record.Store{
 		Virtual: &virtRec,
 		JetID:   p.jet,
 	}

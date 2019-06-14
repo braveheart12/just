@@ -159,7 +159,7 @@ func (p *UpdateObject) handle(ctx context.Context) bus.Reply {
 
 	hash = record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
 	id := insolar.NewID(p.PulseNumber, hash)
-	rec := record.Material{
+	rec := record.Store{
 		Virtual: &virtRec,
 		JetID:   p.JetID,
 	}
@@ -244,7 +244,7 @@ func (p *UpdateObject) recordResult(ctx context.Context) (*insolar.ID, error) {
 
 	hash := record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
 	id := insolar.NewID(p.PulseNumber, hash)
-	rec := record.Material{
+	rec := record.Store{
 		Virtual: &virtRec,
 		JetID:   p.JetID,
 	}

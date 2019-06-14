@@ -53,8 +53,8 @@ func TestDataGatherer_ForPulseAndJet(t *testing.T) {
 	ba.ForPulseMock.Expect(ctx, jetID, pn).Return([]blob.Blob{b})
 
 	ra := object.NewRecordCollectionAccessorMock(t)
-	rec := getMaterialRecord()
-	ra.ForPulseMock.Expect(ctx, jetID, pn).Return([]record.Material{
+	rec := getStoreRecord()
+	ra.ForPulseMock.Expect(ctx, jetID, pn).Return([]record.Store{
 		rec,
 	})
 
@@ -142,8 +142,8 @@ func TestDataGatherer_convertBlobs(t *testing.T) {
 
 func TestDataGatherer_convertRecords(t *testing.T) {
 	ctx := inslogger.TestContext(t)
-	var recs []record.Material
-	fuzz.New().NilChance(0).NumElements(500, 1000).Funcs(func(elem *record.Material, c fuzz.Continue) {
+	var recs []record.Store
+	fuzz.New().NilChance(0).NumElements(500, 1000).Funcs(func(elem *record.Store, c fuzz.Continue) {
 		elem.JetID = gen.JetID()
 		virtRec := getVirtualRecord()
 		elem.Virtual = &virtRec
@@ -176,14 +176,11 @@ func getVirtualRecord() record.Virtual {
 	return virtualRecord
 }
 
-// getMaterialRecord generates random Material record
-func getMaterialRecord() record.Material {
+// getStoreRecord generates random Store record
+func getStoreRecord() record.Store {
 	virtRec := getVirtualRecord()
-
-	materialRecord := record.Material{
+	return record.Store{
 		Virtual: &virtRec,
 		JetID:   gen.JetID(),
 	}
-
-	return materialRecord
 }

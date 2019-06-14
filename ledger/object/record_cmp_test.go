@@ -39,7 +39,7 @@ func TestRecord_Components(t *testing.T) {
 
 	type tempRecord struct {
 		id  insolar.ID
-		rec record.Material
+		rec record.Store
 	}
 
 	var records []tempRecord
@@ -126,11 +126,11 @@ func getVirtualRecord() record.Virtual {
 	return virtualRecord
 }
 
-// getMaterialRecord generates random Material record
-func getMaterialRecord() record.Material {
+// getStoreRecord generates random Store record
+func getMaterialRecord() record.Store {
 	virtRec := getVirtualRecord()
 
-	materialRecord := record.Material{
+	materialRecord := record.Store{
 		Virtual: &virtRec,
 		JetID:   gen.JetID(),
 	}

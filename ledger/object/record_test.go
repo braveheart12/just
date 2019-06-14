@@ -42,7 +42,7 @@ func TestRecordStorage_ForID(t *testing.T) {
 	ctx := inslogger.TestContext(t)
 
 	id := gen.ID()
-	rec := getMaterialRecord()
+	rec := getStoreRecord()
 
 	t.Run("returns correct record-value", func(t *testing.T) {
 		t.Parallel()
@@ -73,7 +73,7 @@ func TestRecordStorage_Set(t *testing.T) {
 	ctx := inslogger.TestContext(t)
 
 	id := gen.ID()
-	rec := getMaterialRecord()
+	rec := getStoreRecord()
 
 	t.Run("saves correct record-value", func(t *testing.T) {
 		t.Parallel()
@@ -119,14 +119,14 @@ func TestRecordStorage_Delete(t *testing.T) {
 		for i := int32(0); i < countFirstPulse; i++ {
 			randID := gen.ID()
 			id := insolar.NewID(firstPulse, randID.Hash())
-			err := recordStorage.Set(ctx, *id, record.Material{})
+			err := recordStorage.Set(ctx, *id, record.Store{})
 			require.NoError(t, err)
 		}
 
 		for i := int32(0); i < countSecondPulse; i++ {
 			randID := gen.ID()
 			id := insolar.NewID(secondPulse, randID.Hash())
-			err := recordStorage.Set(ctx, *id, record.Material{})
+			err := recordStorage.Set(ctx, *id, record.Store{})
 			require.NoError(t, err)
 		}
 		assert.Equal(t, countFirstPulse+countSecondPulse, int32(len(recordStorage.recsStor)))
@@ -147,7 +147,7 @@ func TestRecordStorage_ForPulse(t *testing.T) {
 
 	searchRecs := map[insolar.ID]struct{}{}
 	for i := int32(0); i < rand.Int31n(256); i++ {
-		rec := getMaterialRecord()
+		rec := getStoreRecord()
 		rec.JetID = searchJetID
 
 		h := sha256.New()
@@ -161,7 +161,7 @@ func TestRecordStorage_ForPulse(t *testing.T) {
 	}
 
 	for i := int32(0); i < rand.Int31n(512); i++ {
-		rec := getMaterialRecord()
+		rec := getStoreRecord()
 
 		randID := gen.ID()
 		rID := insolar.NewID(gen.PulseNumber(), randID.Hash())
@@ -198,14 +198,11 @@ func getVirtualRecord() record.Virtual {
 	return virtualRecord
 }
 
-// getMaterialRecord generates random Material record
-func getMaterialRecord() record.Material {
+// getStoreRecord generates random Store record
+func getStoreRecord() record.Store {
 	virtRec := getVirtualRecord()
-
-	materialRecord := record.Material{
+	return record.Store{
 		Virtual: &virtRec,
 		JetID:   gen.JetID(),
 	}
-
-	return materialRecord
 }
