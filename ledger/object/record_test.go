@@ -42,7 +42,7 @@ func TestRecordStorage_ForID(t *testing.T) {
 	ctx := inslogger.TestContext(t)
 
 	id := gen.ID()
-	rec := getStoreRecord()
+	rec := genItem()
 
 	t.Run("returns correct record-value", func(t *testing.T) {
 		t.Parallel()
@@ -52,7 +52,7 @@ func TestRecordStorage_ForID(t *testing.T) {
 
 		resultRec, err := recordStorage.ForID(ctx, id)
 		require.NoError(t, err)
-		assert.Equal(t, rec, resultRec)
+		assert.Equal(t, rec, *resultRec)
 	})
 
 	t.Run("returns error when no record-value for id", func(t *testing.T) {
@@ -73,7 +73,7 @@ func TestRecordStorage_Set(t *testing.T) {
 	ctx := inslogger.TestContext(t)
 
 	id := gen.ID()
-	rec := getStoreRecord()
+	rec := genItem()
 
 	t.Run("saves correct record-value", func(t *testing.T) {
 		t.Parallel()
@@ -119,14 +119,14 @@ func TestRecordStorage_Delete(t *testing.T) {
 		for i := int32(0); i < countFirstPulse; i++ {
 			randID := gen.ID()
 			id := insolar.NewID(firstPulse, randID.Hash())
-			err := recordStorage.Set(ctx, *id, record.Store{})
+			err := recordStorage.Set(ctx, *id, record.Item{})
 			require.NoError(t, err)
 		}
 
 		for i := int32(0); i < countSecondPulse; i++ {
 			randID := gen.ID()
 			id := insolar.NewID(secondPulse, randID.Hash())
-			err := recordStorage.Set(ctx, *id, record.Store{})
+			err := recordStorage.Set(ctx, *id, record.Item{})
 			require.NoError(t, err)
 		}
 		assert.Equal(t, countFirstPulse+countSecondPulse, int32(len(recordStorage.recsStor)))
@@ -147,11 +147,11 @@ func TestRecordStorage_ForPulse(t *testing.T) {
 
 	searchRecs := map[insolar.ID]struct{}{}
 	for i := int32(0); i < rand.Int31n(256); i++ {
-		rec := getStoreRecord()
+		rec := genItem()
 		rec.JetID = searchJetID
 
 		h := sha256.New()
-		hash := record.HashVirtual(h, *rec.Virtual)
+		hash := record.Hash(h, rec.Virtual)
 
 		id := insolar.NewID(searchPN, hash)
 
@@ -161,7 +161,7 @@ func TestRecordStorage_ForPulse(t *testing.T) {
 	}
 
 	for i := int32(0); i < rand.Int31n(512); i++ {
-		rec := getStoreRecord()
+		rec := genItem()
 
 		randID := gen.ID()
 		rID := insolar.NewID(gen.PulseNumber(), randID.Hash())
@@ -174,7 +174,7 @@ func TestRecordStorage_ForPulse(t *testing.T) {
 
 	for _, r := range res {
 		h := sha256.New()
-		hash := record.HashVirtual(h, *r.Virtual)
+		hash := record.Hash(h, r.Virtual)
 
 		rID := insolar.NewID(searchPN, hash)
 		_, ok := searchRecs[*rID]
@@ -182,27 +182,13 @@ func TestRecordStorage_ForPulse(t *testing.T) {
 	}
 }
 
-// getVirtualRecord generates random Virtual record
-func getVirtualRecord() record.Virtual {
-	var requestRecord record.Request
-
+// genItem generates Item record with random JetID.
+func genItem() record.Item {
 	obj := gen.Reference()
-	requestRecord.Object = &obj
-
-	virtualRecord := record.Virtual{
-		Union: &record.Virtual_Request{
-			Request: &requestRecord,
+	return record.Item{
+		JetID: gen.JetID(),
+		Virtual: &record.Request{
+			Object: &obj,
 		},
-	}
-
-	return virtualRecord
-}
-
-// getStoreRecord generates random Store record
-func getStoreRecord() record.Store {
-	virtRec := getVirtualRecord()
-	return record.Store{
-		Virtual: &virtRec,
-		JetID:   gen.JetID(),
 	}
 }

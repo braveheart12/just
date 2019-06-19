@@ -81,12 +81,11 @@ func (p *SetCode) Proceed(ctx context.Context) error {
 	}
 	defer done()
 
-	virtual := record.Wrap(p.record)
-	rec := record.Store{
-		JetID: p.jetID,
-		Virtual: &virtual,
+	item := record.Item{
+		JetID:   p.jetID,
+		Virtual: record.FromVirtual(p.record),
 	}
-	err = p.dep.records.Set(ctx, p.recordID, rec)
+	err = p.dep.records.Set(ctx, p.recordID, item)
 	if err != nil {
 		return errors.Wrap(err, "failed to store record")
 	}

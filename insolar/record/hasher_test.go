@@ -31,57 +31,47 @@ func TestHashVirtual(t *testing.T) {
 	t.Run("check consistent hash for virtual record", func(t *testing.T) {
 		t.Parallel()
 
-		rec := getVirtualRecord()
+		rec := genRecord()
 		h := sha256.New()
-		hash1 := record.HashVirtual(h, rec)
+		hash1 := record.Hash(h, rec)
 
 		h = sha256.New()
-		hash2 := record.HashVirtual(h, rec)
+		hash2 := record.Hash(h, rec)
 		assert.Equal(t, hash1, hash2)
 	})
 
 	t.Run("different hash for changed virtual record", func(t *testing.T) {
 		t.Parallel()
 
-		rec := getVirtualRecord()
+		rec1 := genRecord()
 		h := sha256.New()
-		hashBefore := record.HashVirtual(h, rec)
+		hash1 := record.Hash(h, rec1)
 
-		rec.Union = &record.Virtual_Request{
-			Request: &record.Request{},
-		}
+		rec2 := &record.Request{}
 		h = sha256.New()
-		hashAfter := record.HashVirtual(h, rec)
-		assert.NotEqual(t, hashBefore, hashAfter)
+		hash2 := record.Hash(h, rec2)
+		assert.NotEqual(t, hash1, hash2)
 	})
 
 	t.Run("different hashes for different virtual records", func(t *testing.T) {
 		t.Parallel()
 
-		recFoo := getVirtualRecord()
+		recFoo := genRecord()
 		h := sha256.New()
-		hashFoo := record.HashVirtual(h, recFoo)
+		hashFoo := record.Hash(h, recFoo)
 
-		recBar := getVirtualRecord()
+		recBar := genRecord()
 		h = sha256.New()
-		hashBar := record.HashVirtual(h, recBar)
+		hashBar := record.Hash(h, recBar)
 
 		assert.NotEqual(t, hashFoo, hashBar)
 	})
 }
 
-// getVirtualRecord generates random Virtual record
-func getVirtualRecord() record.Virtual {
-	var requestRecord record.Request
-
+// genRecord generates random record.
+func genRecord() record.Record {
 	obj := gen.Reference()
-	requestRecord.Object = &obj
-
-	virtualRecord := record.Virtual{
-		Union: &record.Virtual_Request{
-			Request: &requestRecord,
-		},
+	return &record.Request{
+		Object: &obj,
 	}
-
-	return virtualRecord
 }

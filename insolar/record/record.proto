@@ -165,5 +165,5 @@ message Store {
 
     bytes JetID = 20 [(gogoproto.customtype) = "github.com/insolar/insolar/insolar.JetID", (gogoproto.nullable) = false];
 
-    Virtual Virtual = 30;
+    Virtual Virtual = 30 [(gogoproto.nullable) = false];
 }

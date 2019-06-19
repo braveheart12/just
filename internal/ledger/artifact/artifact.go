@@ -110,8 +110,7 @@ func (m *Scope) GetObject(
 		return nil, err
 	}
 
-	concrete := record.Unwrap(rec.Virtual)
-	state, ok := concrete.(record.State)
+	state, ok := rec.Virtual.(record.State)
 	if !ok {
 		return nil, errors.New("invalid object record")
 	}
@@ -136,22 +135,19 @@ func (m *Scope) GetObject(
 
 // RegisterRequest creates request record in storage.
 func (m *Scope) RegisterRequest(ctx context.Context, req record.Request) (*insolar.ID, error) {
-	virtRec := record.Wrap(req)
-	return m.setRecord(ctx, virtRec)
+	return m.setRecord(ctx, &req)
 }
 
 // RegisterResult saves payload result in storage (emulates of save call result by VM).
 func (m *Scope) RegisterResult(
 	ctx context.Context, obj, request insolar.Reference, payload []byte,
 ) (*insolar.ID, error) {
-	res := record.Result{
+	res := &record.Result{
 		Object:  *obj.Record(),
 		Request: request,
 		Payload: payload,
 	}
-	virtRec := record.Wrap(res)
-
-	return m.setRecord(ctx, virtRec)
+	return m.setRecord(ctx, res)
 }
 
 // ActivateObject creates activate object record in storage.
@@ -270,26 +266,22 @@ func (m *Scope) DeployCode(
 	code []byte,
 	machineType insolar.MachineType,
 ) (*insolar.ID, error) {
-	codeRec := record.Code{
+	codeRec := &record.Code{
 		Domain:      domain,
 		Request:     request,
 		Code:        code,
 		MachineType: machineType,
 	}
-
-	return m.setRecord(
-		ctx,
-		record.Wrap(codeRec),
-	)
+	return m.setRecord(ctx, codeRec)
 }
 
-func (m *Scope) setRecord(ctx context.Context, v record.Virtual) (*insolar.ID, error) {
-	hash := record.HashVirtual(m.PCS.ReferenceHasher(), v)
+func (m *Scope) setRecord(ctx context.Context, r record.Record) (*insolar.ID, error) {
+	hash := record.Hash(m.PCS.ReferenceHasher(), r)
 	id := insolar.NewID(m.PulseNumber, hash)
 
-	rec := record.Store{
-		Virtual: &v,
+	rec := record.Item{
 		JetID:   insolar.ZeroJetID,
+		Virtual: r,
 	}
 	return id, m.RecordModifier.Set(ctx, *id, rec)
 }
@@ -323,12 +315,12 @@ func (m *Scope) registerChild(
 		return err
 	}
 
-	childRec := record.Child{Ref: obj}
+	childRec := &record.Child{Ref: obj}
 	if prevChild != nil && prevChild.NotEmpty() {
 		childRec.PrevChild = *prevChild
 	}
 
-	hash := record.HashVirtual(m.PCS.ReferenceHasher(), record.Wrap(childRec))
+	hash := record.Hash(m.PCS.ReferenceHasher(), childRec)
 	recID := insolar.NewID(m.PulseNumber, hash)
 
 	// Children exist and pointer does not match (preserving chain consistency).
@@ -337,7 +329,7 @@ func (m *Scope) registerChild(
 		return errors.New("invalid child record")
 	}
 
-	child, err := m.setRecord(ctx, record.Wrap(childRec))
+	child, err := m.setRecord(ctx, childRec)
 	if err != nil {
 		return err
 	}
@@ -363,14 +355,14 @@ func (m *Scope) updateStateObject(
 		return nil, errors.Wrap(err, "failed to update blob")
 	}
 
-	var virtRecord record.Virtual
+	var rec record.Record
 	switch so := stateObject.(type) {
 	case record.Activate:
 		so.Memory = *blobID
-		virtRecord = record.Wrap(so)
+		rec = &so
 	case record.Amend:
 		so.Memory = *blobID
-		virtRecord = record.Wrap(so)
+		rec = &so
 	default:
 		panic("unknown state object type")
 	}
@@ -388,7 +380,7 @@ func (m *Scope) updateStateObject(
 		idx = object.Lifeline{StateID: record.StateUndefined}
 	}
 
-	id, err := m.setRecord(ctx, virtRecord)
+	id, err := m.setRecord(ctx, rec)
 	if err != nil {
 		return nil, errors.Wrap(err, "fail set record for state object")
 	}

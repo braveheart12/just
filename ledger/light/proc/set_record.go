@@ -84,26 +84,24 @@ func (p *SetRecord) reply(ctx context.Context) bus.Reply {
 		return bus.Reply{Err: errors.Wrap(err, "can't deserialize record")}
 	}
 
-	hash := record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
-	calculatedID := insolar.NewID(flow.Pulse(ctx), hash)
-
-	hash = record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
+	rec := record.FromVirtual(virtRec)
+	hash := record.Hash(p.Dep.PCS.ReferenceHasher(), rec)
 	id := insolar.NewID(flow.Pulse(ctx), hash)
-	rec := record.Store{
-		Virtual: &virtRec,
+
+	item := record.Item{
 		JetID:   p.jet,
+		Virtual: rec,
 	}
-
-	err = p.Dep.RecordModifier.Set(ctx, *id, rec)
-
+	err = p.Dep.RecordModifier.Set(ctx, *id, item)
 	if err == object.ErrOverride {
 		inslogger.FromContext(ctx).WithField("type", fmt.Sprintf("%T", virtRec)).Warn("set record override")
-		id = calculatedID
 	} else if err != nil {
-		return bus.Reply{Err: errors.Wrap(err, "can't save record into storage")}
+		return bus.Reply{
+			Err: errors.Wrap(err, "can't save record into storage"),
+		}
 	}
 
-	penReply := p.handlePendings(ctx, *calculatedID, &virtRec)
+	penReply := p.handlePendings(ctx, *id, virtRec)
 	if penReply != nil {
 		return *penReply
 	}
@@ -111,8 +109,8 @@ func (p *SetRecord) reply(ctx context.Context) bus.Reply {
 	return bus.Reply{Reply: &reply.ID{ID: *id}}
 }
 
-func (p *SetRecord) handlePendings(ctx context.Context, calculatedID insolar.ID, virtRec *record.Virtual) *bus.Reply {
-	concrete := record.Unwrap(virtRec)
+func (p *SetRecord) handlePendings(ctx context.Context, calculatedID insolar.ID, virtRec record.Virtual) *bus.Reply {
+	concrete := record.FromVirtual(virtRec)
 	switch r := concrete.(type) {
 	case *record.Request:
 		// Skip object creation and genesis

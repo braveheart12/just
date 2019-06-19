@@ -93,8 +93,9 @@ func (p *UpdateObject) handle(ctx context.Context) bus.Reply {
 	if err != nil {
 		return bus.Reply{Err: errors.Wrap(err, "can't deserialize record")}
 	}
-	concreteRec := record.Unwrap(&virtRec)
-	state, ok := concreteRec.(record.State)
+
+	concrete := record.FromVirtual(virtRec)
+	state, ok := concrete.(record.State)
 	if !ok {
 		return bus.Reply{Err: errors.New("wrong object state record")}
 	}
@@ -148,30 +149,26 @@ func (p *UpdateObject) handle(ctx context.Context) bus.Reply {
 		return bus.Reply{Reply: &reply.Error{ErrType: reply.ErrDeactivated}}
 	}
 
-	hash := record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
-	recID := insolar.NewID(p.PulseNumber, hash)
+	hash := record.Hash(p.Dep.PCS.ReferenceHasher(), concrete)
+	id := insolar.NewID(p.PulseNumber, hash)
 
 	// LifelineIndex exists and latest record id does not match (preserving chain consistency).
 	// For the case when vm can't save or send result to another vm and it tries to update the same record again
-	if idx.LatestState != nil && !state.PrevStateID().Equal(*idx.LatestState) && idx.LatestState != recID {
+	if idx.LatestState != nil && !state.PrevStateID().Equal(*idx.LatestState) && idx.LatestState != id {
 		return bus.Reply{Err: errors.New("invalid state record")}
 	}
 
-	hash = record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
-	id := insolar.NewID(p.PulseNumber, hash)
-	rec := record.Store{
-		Virtual: &virtRec,
+	item := record.Item{
 		JetID:   p.JetID,
+		Virtual: concrete,
 	}
-
-	err = p.Dep.RecordModifier.Set(ctx, *id, rec)
-
+	err = p.Dep.RecordModifier.Set(ctx, *id, item)
 	if err == object.ErrOverride {
 		logger.WithField("type", fmt.Sprintf("%T", virtRec)).Warn("set record override (#1)")
-		id = recID
 	} else if err != nil {
 		return bus.Reply{Err: errors.Wrap(err, "can't save record into storage")}
 	}
+
 	idx.LatestState = id
 	idx.StateID = state.ID()
 	if state.ID() == record.StateActivation {
@@ -242,21 +239,21 @@ func (p *UpdateObject) recordResult(ctx context.Context) (*insolar.ID, error) {
 		return nil, errors.Wrap(err, "can't deserialize record")
 	}
 
-	hash := record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
+	rec := record.FromVirtual(virtRec)
+	hash := record.Hash(p.Dep.PCS.ReferenceHasher(), rec)
 	id := insolar.NewID(p.PulseNumber, hash)
-	rec := record.Store{
-		Virtual: &virtRec,
+	item := record.Item{
 		JetID:   p.JetID,
+		Virtual: rec,
 	}
-
-	err = p.Dep.RecordModifier.Set(ctx, *id, rec)
-
+	err = p.Dep.RecordModifier.Set(ctx, *id, item)
 	if err == object.ErrOverride {
-		inslogger.FromContext(ctx).WithField("type", fmt.Sprintf("%T", virtRec)).Warn("set record override")
+		inslogger.FromContext(ctx).WithField("type", fmt.Sprintf("%T", rec)).Warn("set record override")
 	} else if err != nil {
 		return nil, errors.Wrap(err, "can't save record into storage")
 	}
-	err = p.closePending(ctx, *id, &virtRec)
+
+	err = p.closePending(ctx, *id, virtRec)
 	if err != nil {
 		return nil, errors.Wrap(err, "can't close Pending")
 	}
@@ -264,9 +261,9 @@ func (p *UpdateObject) recordResult(ctx context.Context) (*insolar.ID, error) {
 	return id, nil
 }
 
-func (p *UpdateObject) closePending(ctx context.Context, id insolar.ID, virtRec *record.Virtual) error {
-	concrete := record.Unwrap(virtRec)
-	switch r := concrete.(type) {
+func (p *UpdateObject) closePending(ctx context.Context, id insolar.ID, virtRec record.Virtual) error {
+	rec := record.FromVirtual(virtRec)
+	switch r := rec.(type) {
 	case *record.Result:
 		recentStorage := p.Dep.RecentStorageProvider.GetPendingStorage(ctx, insolar.ID(p.JetID))
 		recentStorage.RemovePendingRequest(ctx, r.Object, *r.Request.Record())

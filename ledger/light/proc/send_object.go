@@ -65,12 +65,11 @@ func NewSendObject(
 }
 
 func (p *SendObject) Proceed(ctx context.Context) error {
-	sendState := func(rec record.Store) error {
-		virtual := rec.Virtual
-		concrete := record.Unwrap(virtual)
-		state, ok := concrete.(record.State)
+	sendState := func(item record.Item) error {
+		rec := item.Virtual
+		state, ok := rec.(record.State)
 		if !ok {
-			return fmt.Errorf("invalid object record %#v", virtual)
+			return fmt.Errorf("invalid object record %#v", rec)
 		}
 
 		if state.ID() == record.StateDeactivation {
@@ -90,7 +89,8 @@ func (p *SendObject) Proceed(ctx context.Context) error {
 			}
 			memory = b.Value
 		}
-		buf, err := rec.Marshal()
+		virtual := record.ToVirtual(rec)
+		buf, err := virtual.Marshal()
 		if err != nil {
 			return errors.Wrap(err, "failed to marshal state record")
 		}
@@ -170,7 +170,7 @@ func (p *SendObject) Proceed(ctx context.Context) error {
 	switch err {
 	case nil:
 		logger.Info("sending state")
-		return sendState(rec)
+		return sendState(*rec)
 	case object.ErrNotFound:
 		logger.Info("state not found (sending pass)")
 		return sendPassState(*p.index.LatestState)

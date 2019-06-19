@@ -84,8 +84,8 @@ func TestGetChildren_RedirectToLight(t *testing.T) {
 	jetID := insolar.ID(*insolar.NewJetID(0, nil))
 
 	ra := object.NewRecordAccessorMock(t)
-	ra.ForIDFunc = func(ctx context.Context, id insolar.ID) (record.Store, error) {
-		return record.Store{}, object.ErrNotFound
+	ra.ForIDFunc = func(_ context.Context, _ insolar.ID) (*record.Item, error) {
+		return nil, object.ErrNotFound
 	}
 	rsm := object.NewRecordStorageMock(t)
 	rsm.ForIDFunc = ra.ForIDFunc
@@ -141,8 +141,8 @@ func TestGetChildren_RedirectToHeavy(t *testing.T) {
 	jetID := insolar.ID(*insolar.NewJetID(0, nil))
 
 	ra := object.NewRecordAccessorMock(t)
-	ra.ForIDFunc = func(ctx context.Context, id insolar.ID) (record.Store, error) {
-		return record.Store{}, object.ErrNotFound
+	ra.ForIDFunc = func(_ context.Context, _ insolar.ID) (*record.Item, error) {
+		return nil, object.ErrNotFound
 	}
 	rsm := object.NewRecordStorageMock(t)
 	rsm.ForIDFunc = ra.ForIDFunc

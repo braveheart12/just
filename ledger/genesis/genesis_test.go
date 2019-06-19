@@ -26,27 +26,22 @@ import (
 )
 
 func TestGenesisRecordMarshalUnmarshal(t *testing.T) {
-	genIn := record.Genesis{
+	genIn := &record.Genesis{
 		Hash: insolar.GenesisRecord,
 	}
 
-	virtGenIn := record.Wrap(genIn)
-
-	data, err := virtGenIn.Marshal()
+	dataIn, err := genIn.Marshal()
 	require.NoError(t, err)
 
-	require.Equal(t, "aa0604a20101ac", hex.EncodeToString(data),
+	require.Equal(t,
+		"a20101ac", hex.EncodeToString(dataIn),
 		"genesis binary representation always the same")
 
-	virtGenOut := record.Virtual{}
-	err = virtGenOut.Unmarshal(data)
+	genOut := &record.Genesis{}
+	err = genOut.Unmarshal(dataIn)
 	require.NoError(t, err, "genesis record unmarshal w/o error")
 
-	genOut := record.Unwrap(&virtGenOut)
-
-	require.Equal(t, &genIn, genOut, "marshal-unmarshal-marshal gives the same struct")
-
-	data2, err := virtGenOut.Marshal()
+	dataOut, err := genOut.Marshal()
 	require.NoError(t, err)
-	require.Equal(t, data, data2, "marshal-unmarshal-marshal gives the same binary result")
+	require.Equal(t, dataIn, dataOut, "marshal-unmarshal-marshal gives the same binary result")
 }

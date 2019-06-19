@@ -57,16 +57,18 @@ func NewGetCode(msg payload.Meta, codeID insolar.ID, pass bool) *GetCode {
 
 func (p *GetCode) Proceed(ctx context.Context) error {
 	logger := inslogger.FromContext(ctx)
-	sendCode := func(rec record.Store) error {
-		virtual := record.Unwrap(rec.Virtual)
-		code, ok := virtual.(*record.Code)
+	sendCode := func(rec record.Item) error {
+		code, ok := rec.Virtual.(*record.Code)
 		if !ok {
-			return fmt.Errorf("invalid code record %#v", virtual)
+			return fmt.Errorf("expect code record, but got %T", rec.Virtual)
 		}
-		buf, err := rec.Marshal()
+
+		virtual := record.ToVirtual(rec.Virtual)
+		buf, err := virtual.Marshal()
 		if err != nil {
 			return errors.Wrap(err, "failed to marshal record")
 		}
+
 		msg, err := payload.NewMessage(&payload.Code{
 			Record: buf,
 			Code:   code.Code,
@@ -124,11 +126,11 @@ func (p *GetCode) Proceed(ctx context.Context) error {
 		return nil
 	}
 
-	rec, err := p.Dep.RecordAccessor.ForID(ctx, p.codeID)
+	item, err := p.Dep.RecordAccessor.ForID(ctx, p.codeID)
 	switch err {
 	case nil:
 		logger.Debug("sending code")
-		return sendCode(rec)
+		return sendCode(*item)
 	case object.ErrNotFound:
 		if p.pass {
 			logger.Info("code not found (sending pass)")

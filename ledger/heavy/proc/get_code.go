@@ -52,19 +52,23 @@ func (p *GetCode) Proceed(ctx context.Context) error {
 		return errors.Wrap(err, "failed to unmarshal GetCode message")
 	}
 
-	rec, err := p.Dep.RecordAccessor.ForID(ctx, getCode.CodeID)
+	item, err := p.Dep.RecordAccessor.ForID(ctx, getCode.CodeID)
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch record")
 	}
-	virtual := record.Unwrap(rec.Virtual)
-	code, ok := virtual.(*record.Code)
+
+	rec := item.Virtual
+	code, ok := rec.(*record.Code)
 	if !ok {
-		return fmt.Errorf("invalid code record %#v", virtual)
+		return fmt.Errorf("expect code record, but got type %T", rec)
 	}
-	buf, err := rec.Marshal()
+
+	virtual := record.ToVirtual(rec)
+	buf, err := virtual.Marshal()
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal record")
 	}
+
 	msg, err := payload.NewMessage(&payload.Code{
 		Record: buf,
 		Code:   code.Code,

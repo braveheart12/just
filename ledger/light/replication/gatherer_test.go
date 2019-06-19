@@ -53,8 +53,8 @@ func TestDataGatherer_ForPulseAndJet(t *testing.T) {
 	ba.ForPulseMock.Expect(ctx, jetID, pn).Return([]blob.Blob{b})
 
 	ra := object.NewRecordCollectionAccessorMock(t)
-	rec := getStoreRecord()
-	ra.ForPulseMock.Expect(ctx, jetID, pn).Return([]record.Store{
+	rec := makeItemRecord()
+	ra.ForPulseMock.Expect(ctx, jetID, pn).Return([]record.Item{
 		rec,
 	})
 
@@ -73,7 +73,13 @@ func TestDataGatherer_ForPulseAndJet(t *testing.T) {
 	}
 	ia.ForPNAndJetMock.Return(bucks)
 
-	recData, _ := rec.Marshal()
+	s := record.Store{
+		JetID:   rec.JetID,
+		Virtual: record.ToVirtual(rec.Virtual),
+	}
+
+	recData, err := s.Marshal()
+	require.NoError(t, err)
 
 	expectedMsg := &message.HeavyPayload{
 		JetID:        jetID,
@@ -142,45 +148,42 @@ func TestDataGatherer_convertBlobs(t *testing.T) {
 
 func TestDataGatherer_convertRecords(t *testing.T) {
 	ctx := inslogger.TestContext(t)
-	var recs []record.Store
-	fuzz.New().NilChance(0).NumElements(500, 1000).Funcs(func(elem *record.Store, c fuzz.Continue) {
-		elem.JetID = gen.JetID()
-		virtRec := getVirtualRecord()
-		elem.Virtual = &virtRec
-	}).Fuzz(&recs)
+
+	var itemRecs []record.Item
+	fuzz.New().NilChance(0).NumElements(500, 1000).Funcs(
+		func(elem *record.Item, c fuzz.Continue) {
+			elem.JetID = gen.JetID()
+			elem.Virtual = makeVirtualRecord()
+		},
+	).Fuzz(&itemRecs)
 
 	var expected [][]byte
-	for _, r := range recs {
-		data, _ := r.Marshal()
+	for _, r := range itemRecs {
+		s := r.ToStore()
+		data, err := s.Marshal()
+		require.NoError(t, err)
 		expected = append(expected, data)
 	}
 
-	resp := convertRecords(ctx, recs)
-
-	require.Equal(t, resp, expected)
+	gotConverted := convertRecords(ctx, itemRecs)
+	require.Equal(t, expected, gotConverted)
 }
 
-// getVirtualRecord generates random Virtual record
-func getVirtualRecord() record.Virtual {
+// makeVirtualRecord generates random Virtual record
+func makeVirtualRecord() record.Record {
 	var requestRecord record.Request
 
 	obj := gen.Reference()
 	requestRecord.Object = &obj
 
-	virtualRecord := record.Virtual{
-		Union: &record.Virtual_Request{
-			Request: &requestRecord,
-		},
-	}
-
-	return virtualRecord
+	return &requestRecord
 }
 
-// getStoreRecord generates random Store record
-func getStoreRecord() record.Store {
-	virtRec := getVirtualRecord()
-	return record.Store{
-		Virtual: &virtRec,
+// makeItemRecord generates random Store record
+func makeItemRecord() record.Item {
+	virtRec := makeVirtualRecord()
+	return record.Item{
 		JetID:   gen.JetID(),
+		Virtual: virtRec,
 	}
 }

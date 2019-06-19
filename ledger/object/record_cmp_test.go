@@ -39,14 +39,14 @@ func TestRecord_Components(t *testing.T) {
 
 	type tempRecord struct {
 		id  insolar.ID
-		rec record.Store
+		rec record.Item
 	}
 
 	var records []tempRecord
 
 	f := fuzz.New().Funcs(func(t *tempRecord, c fuzz.Continue) {
 		t.id = gen.ID()
-		t.rec = getMaterialRecord()
+		t.rec = getItemRecord()
 	})
 	f.NilChance(0)
 	f.NumElements(10, 20)
@@ -57,19 +57,20 @@ func TestRecord_Components(t *testing.T) {
 
 		for _, r := range records {
 			memErr := memStorage.Set(ctx, r.id, r.rec)
-			dbErr := dbStorage.Set(ctx, r.id, r.rec)
 			require.NoError(t, memErr)
+
+			dbErr := dbStorage.Set(ctx, r.id, r.rec)
 			require.NoError(t, dbErr)
 		}
 
 		for _, r := range records {
 			memRecord, memErr := memStorage.ForID(ctx, r.id)
-			dbRecord, dbErr := dbStorage.ForID(ctx, r.id)
 			require.NoError(t, memErr)
-			require.NoError(t, dbErr)
+			assert.Equal(t, r.rec, *memRecord)
 
-			assert.Equal(t, r.rec, memRecord)
-			assert.Equal(t, r.rec, dbRecord)
+			dbRecord, dbErr := dbStorage.ForID(ctx, r.id)
+			require.NoError(t, dbErr)
+			assert.Equal(t, r.rec, *dbRecord)
 		}
 	})
 
@@ -110,30 +111,15 @@ func TestRecord_Components(t *testing.T) {
 	})
 }
 
-// getVirtualRecord generates random Virtual record
-func getVirtualRecord() record.Virtual {
-	var requestRecord record.Request
-
+// genItem generates random Store record
+func getItemRecord() record.Item {
 	obj := gen.Reference()
-	requestRecord.Object = &obj
-
-	virtualRecord := record.Virtual{
-		Union: &record.Virtual_Request{
-			Request: &requestRecord,
-		},
+	requestRecord := &record.Request{
+		Object: &obj,
 	}
 
-	return virtualRecord
-}
-
-// getStoreRecord generates random Store record
-func getMaterialRecord() record.Store {
-	virtRec := getVirtualRecord()
-
-	materialRecord := record.Store{
-		Virtual: &virtRec,
+	return record.Item{
 		JetID:   gen.JetID(),
+		Virtual: requestRecord,
 	}
-
-	return materialRecord
 }

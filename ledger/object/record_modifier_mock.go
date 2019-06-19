@@ -21,7 +21,7 @@ import (
 type RecordModifierMock struct {
 	t minimock.Tester
 
-	SetFunc       func(p context.Context, p1 insolar.ID, p2 record.Store) (r error)
+	SetFunc       func(p context.Context, p1 insolar.ID, p2 record.Item) (r error)
 	SetCounter    uint64
 	SetPreCounter uint64
 	SetMock       mRecordModifierMockSet
@@ -54,7 +54,7 @@ type RecordModifierMockSetExpectation struct {
 type RecordModifierMockSetInput struct {
 	p  context.Context
 	p1 insolar.ID
-	p2 record.Store
+	p2 record.Item
 }
 
 type RecordModifierMockSetResult struct {
@@ -62,7 +62,7 @@ type RecordModifierMockSetResult struct {
 }
 
 //Expect specifies that invocation of RecordModifier.Set is expected from 1 to Infinity times
-func (m *mRecordModifierMockSet) Expect(p context.Context, p1 insolar.ID, p2 record.Store) *mRecordModifierMockSet {
+func (m *mRecordModifierMockSet) Expect(p context.Context, p1 insolar.ID, p2 record.Item) *mRecordModifierMockSet {
 	m.mock.SetFunc = nil
 	m.expectationSeries = nil
 
@@ -86,7 +86,7 @@ func (m *mRecordModifierMockSet) Return(r error) *RecordModifierMock {
 }
 
 //ExpectOnce specifies that invocation of RecordModifier.Set is expected once
-func (m *mRecordModifierMockSet) ExpectOnce(p context.Context, p1 insolar.ID, p2 record.Store) *RecordModifierMockSetExpectation {
+func (m *mRecordModifierMockSet) ExpectOnce(p context.Context, p1 insolar.ID, p2 record.Item) *RecordModifierMockSetExpectation {
 	m.mock.SetFunc = nil
 	m.mainExpectation = nil
 
@@ -101,7 +101,7 @@ func (e *RecordModifierMockSetExpectation) Return(r error) {
 }
 
 //Set uses given function f as a mock of RecordModifier.Set method
-func (m *mRecordModifierMockSet) Set(f func(p context.Context, p1 insolar.ID, p2 record.Store) (r error)) *RecordModifierMock {
+func (m *mRecordModifierMockSet) Set(f func(p context.Context, p1 insolar.ID, p2 record.Item) (r error)) *RecordModifierMock {
 	m.mainExpectation = nil
 	m.expectationSeries = nil
 
@@ -110,7 +110,7 @@ func (m *mRecordModifierMockSet) Set(f func(p context.Context, p1 insolar.ID, p2
 }
 
 //Set implements github.com/insolar/insolar/ledger/object.RecordModifier interface
-func (m *RecordModifierMock) Set(p context.Context, p1 insolar.ID, p2 record.Store) (r error) {
+func (m *RecordModifierMock) Set(p context.Context, p1 insolar.ID, p2 record.Item) (r error) {
 	counter := atomic.AddUint64(&m.SetPreCounter, 1)
 	defer atomic.AddUint64(&m.SetCounter, 1)
 

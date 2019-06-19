@@ -73,7 +73,7 @@ func (p *RegisterChild) process(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "can't deserialize record")
 	}
-	concreteRec := record.Unwrap(&virtRec)
+	concreteRec := record.FromVirtual(virtRec)
 	childRec, ok := concreteRec.(*record.Child)
 	if !ok {
 		return errors.New("wrong child record")
@@ -82,32 +82,28 @@ func (p *RegisterChild) process(ctx context.Context) error {
 	p.Dep.IDLocker.Lock(p.msg.Parent.Record())
 	defer p.Dep.IDLocker.Unlock(p.msg.Parent.Record())
 
-	hash := record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
-	recID := insolar.NewID(p.pulse, hash)
+	hash := record.Hash(p.Dep.PCS.ReferenceHasher(), childRec)
+	childID := insolar.NewID(p.pulse, hash)
 
 	// Children exist and pointer does not match (preserving chain consistency).
 	// For the case when vm can't save or send result to another vm and it tries to update the same record again
-	if p.idx.ChildPointer != nil && !childRec.PrevChild.Equal(*p.idx.ChildPointer) && p.idx.ChildPointer != recID {
+	if p.idx.ChildPointer != nil && !childRec.PrevChild.Equal(*p.idx.ChildPointer) && p.idx.ChildPointer != childID {
 		return errors.New("invalid child record")
 	}
 
-	hash = record.HashVirtual(p.Dep.PCS.ReferenceHasher(), virtRec)
-	child := insolar.NewID(p.pulse, hash)
-	rec := record.Store{
-		Virtual: &virtRec,
+	item := record.Item{
 		JetID:   p.jet,
+		Virtual: childRec,
 	}
-
-	err = p.Dep.RecordModifier.Set(ctx, *child, rec)
+	err = p.Dep.RecordModifier.Set(ctx, *childID, item)
 
 	if err == object.ErrOverride {
 		inslogger.FromContext(ctx).WithField("type", fmt.Sprintf("%T", virtRec)).Warn("set record override (#2)")
-		child = recID
 	} else if err != nil {
 		return errors.Wrap(err, "can't save record into storage")
 	}
 
-	p.idx.ChildPointer = child
+	p.idx.ChildPointer = childID
 	if p.msg.AsType != nil {
 		p.idx.SetDelegate(*p.msg.AsType, p.msg.Child)
 	}
@@ -123,6 +119,6 @@ func (p *RegisterChild) process(ctx context.Context) error {
 		return errors.Wrap(err, "can't update a lifeline status")
 	}
 
-	p.replyTo <- bus.Reply{Reply: &reply.ID{ID: *child}}
+	p.replyTo <- bus.Reply{Reply: &reply.ID{ID: *childID}}
 	return nil
 }

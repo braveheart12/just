@@ -20,72 +20,73 @@ import (
 	"fmt"
 )
 
-func Wrap(record Record) Virtual {
+// ToVirtual converts Record struct to protobuf friendly Virtual record.
+func ToVirtual(record Record) Virtual {
 	switch generic := record.(type) {
-	case Genesis:
+	case *Genesis:
 		return Virtual{
 			Union: &Virtual_Genesis{
-				Genesis: &generic,
+				Genesis: generic,
 			},
 		}
-	case Child:
+	case *Child:
 		return Virtual{
 			Union: &Virtual_Child{
-				Child: &generic,
+				Child: generic,
 			},
 		}
-	case Jet:
+	case *Jet:
 		return Virtual{
 			Union: &Virtual_Jet{
-				Jet: &generic,
+				Jet: generic,
 			},
 		}
-	case Request:
+	case *Request:
 		return Virtual{
 			Union: &Virtual_Request{
-				Request: &generic,
+				Request: generic,
 			},
 		}
-	case Result:
+	case *Result:
 		return Virtual{
 			Union: &Virtual_Result{
-				Result: &generic,
+				Result: generic,
 			},
 		}
-	case Type:
+	case *Type:
 		return Virtual{
 			Union: &Virtual_Type{
-				Type: &generic,
+				Type: generic,
 			},
 		}
-	case Code:
+	case *Code:
 		return Virtual{
 			Union: &Virtual_Code{
-				Code: &generic,
+				Code: generic,
 			},
 		}
-	case Activate:
+	case *Activate:
 		return Virtual{
 			Union: &Virtual_Activate{
-				Activate: &generic,
+				Activate: generic,
 			},
 		}
-	case Amend:
+	case *Amend:
 		return Virtual{
 			Union: &Virtual_Amend{
-				Amend: &generic,
+				Amend: generic,
 			},
 		}
-	case Deactivate:
+	case *Deactivate:
 		return Virtual{
 			Union: &Virtual_Deactivate{
-				Deactivate: &generic,
+				Deactivate: generic,
 			},
 		}
-	case PendingFilament:
+	case *PendingFilament:
 		return Virtual{
 			Union: &Virtual_PendingFilament{
-				PendingFilament: &generic,
+				PendingFilament: generic,
 			},
 		}
 	default:
@@ -93,10 +94,8 @@ func Wrap(record Record) Virtual {
 	}
 }
 
-func Unwrap(v *Virtual) Record {
-	if v == nil {
-		return nil
-	}
+// FromVirtual converts protobuf friendly Virtual record to Record struct.
+func FromVirtual(v Virtual) Record {
 	switch r := v.Union.(type) {
 	case *Virtual_Genesis:
 		return r.Genesis

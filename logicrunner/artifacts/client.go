@@ -151,14 +151,14 @@ func (m *client) RegisterRequest(
 		return nil, err
 	}
 
-	virtRec := record.Wrap(request)
+	virtRec := record.ToVirtual(&request)
 
 	var recRef *insolar.Reference
 	switch request.CallType {
 	case record.CTMethod:
 		recRef = request.Object
 	case record.CTSaveAsChild, record.CTSaveAsDelegate, record.CTGenesis:
-		hash := record.HashVirtual(m.PCS.ReferenceHasher(), virtRec)
+		hash := record.Hash(m.PCS.ReferenceHasher(), &request)
 		recID := insolar.NewID(currentPN, hash)
 		recRef = insolar.NewReference(*recID)
 	default:
@@ -226,12 +226,12 @@ func (m *client) GetCode(
 
 	switch p := pl.(type) {
 	case *payload.Code:
-		virtual := &record.Virtual{}
+		virtual := record.Virtual{}
 		err := virtual.Unmarshal(p.Record)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal code to virtual record")
 		}
-		rec := record.Unwrap(virtual)
+		rec := record.FromVirtual(virtual)
 		codeRecord, ok := rec.(*record.Code)
 		if !ok {
 			return nil, errors.Wrapf(err, "unexpected record %T", rec)
@@ -337,13 +337,14 @@ func (m *client) GetObject(
 		return nil, errors.New("no reply")
 	}
 
-	rec := record.Store{}
-	err = rec.Unmarshal(statePayload.Record)
+	virtual := record.Virtual{}
+	err = virtual.Unmarshal(statePayload.Record)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal state")
 	}
-	virtual := record.Unwrap(rec.Virtual)
-	s, ok := virtual.(record.State)
+
+	rec := record.FromVirtual(virtual)
+	s, ok := rec.(record.State)
 	if !ok {
 		return nil, errors.New("wrong state record")
 	}
@@ -417,7 +418,8 @@ func (m *client) GetPendingRequest(ctx context.Context, objectID insolar.ID) (*i
 		ctx,
 		&message.GetRequest{
 			Request: requestID,
-		}, &insolar.MessageSendOptions{
+		},
+		&insolar.MessageSendOptions{
 			Receiver: node,
 		},
 	)
@@ -427,15 +429,16 @@ func (m *client) GetPendingRequest(ctx context.Context, objectID insolar.ID) (*i
 
 	switch r := genericReply.(type) {
 	case *reply.Request:
-		rec := record.Virtual{}
-		err = rec.Unmarshal(r.Record)
+		virtual := record.Virtual{}
+		err = virtual.Unmarshal(r.Record)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "GetPendingRequest: can't deserialize record")
 		}
-		concrete := record.Unwrap(&rec)
-		castedRecord, ok := concrete.(*record.Request)
+
+		rec := record.FromVirtual(virtual)
+		req, ok := rec.(*record.Request)
 		if !ok {
-			return nil, nil, fmt.Errorf("GetPendingRequest: unexpected message: %#v", r)
+			return nil, nil, fmt.Errorf("GetPendingRequest: unexpected message: %#v", rec)
 		}
 
 		serviceData := message.ServiceData{
@@ -443,8 +446,12 @@ func (m *client) GetPendingRequest(ctx context.Context, objectID insolar.ID) (*i
 			LogLevel:      inslogger.GetLoggerLevel(ctx),
 			TraceSpanData: instracer.MustSerialize(ctx),
 		}
-		return insolar.NewReference(requestID), &message.Parcel{Msg: &message.CallMethod{
-			Request: *castedRecord}, ServiceData: serviceData}, nil
+		return insolar.NewReference(requestID),
+			&message.Parcel{
+				Msg:         &message.CallMethod{Request: *req},
+				ServiceData: serviceData,
+			},
+			nil
 	case *reply.Error:
 		return nil, nil, r.Error()
 	default:
@@ -578,13 +585,13 @@ func (m *client) DeployCode(
 		return nil, err
 	}
 
-	codeRec := record.Code{
+	codeRec := &record.Code{
 		Domain:      domain,
 		Request:     request,
 		Code:        code,
 		MachineType: machineType,
 	}
-	virtual := record.Wrap(codeRec)
+	virtual := record.ToVirtual(codeRec)
 	buf, err := virtual.Marshal()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal record")
@@ -601,7 +608,6 @@ func (m *client) DeployCode(
 		Record: buf,
 		Code:   code,
 	}
-
 
 	pl, err := m.retryer(ctx, psc, insolar.DynamicRoleLightExecutor, *insolar.NewReference(recID), 3)
 	if err != nil {
@@ -644,7 +650,6 @@ func (m *client) retryer(ctx context.Context, ppl payload.Payload, role insolar.
 	}
 	return nil, fmt.Errorf("flow cancelled, retries exceeded")
 }
-
 
 // ActivatePrototype creates activate object record in storage. Provided prototype reference will be used as objects prototype
 // memory as memory of created object. If memory is not provided, the prototype default memory will be used.
@@ -711,11 +716,11 @@ func (m *client) DeactivateObject(
 		instrumenter.end()
 	}()
 
-	deactivate := record.Deactivate{
+	deactivate := &record.Deactivate{
 		Request:   request,
 		PrevState: *obj.StateID(),
 	}
-	resultRecord := record.Result{
+	resultRecord := &record.Result{
 		Object:  *obj.HeadRef().Record(),
 		Request: request,
 		Payload: result,
@@ -723,8 +728,8 @@ func (m *client) DeactivateObject(
 
 	desc, err := m.sendUpdateObject(
 		ctx,
-		record.Wrap(deactivate),
-		record.Wrap(resultRecord),
+		record.ToVirtual(deactivate),
+		record.ToVirtual(resultRecord),
 		*obj.HeadRef(),
 		nil,
 	)
@@ -816,19 +821,16 @@ func (m *client) RegisterResult(
 		instrumenter.end()
 	}()
 
-	res := record.Result{
+	res := &record.Result{
 		Object:  *obj.Record(),
 		Request: request,
 		Payload: payload,
 	}
-	virtRec := record.Wrap(res)
-
-	recid, err := m.setRecord(
+	return m.setRecord(
 		ctx,
-		virtRec,
+		record.ToVirtual(res),
 		obj,
 	)
-	return recid, err
 }
 
 // pulse returns current PulseNumber for artifact manager
@@ -858,7 +860,7 @@ func (m *client) activateObject(
 		return nil, err
 	}
 
-	activate := record.Activate{
+	activate := &record.Activate{
 		Request:     obj,
 		Memory:      *object.CalculateIDForBlob(m.PCS, currentPN, memory),
 		Image:       prototype,
@@ -867,15 +869,15 @@ func (m *client) activateObject(
 		IsDelegate:  asDelegate,
 	}
 
-	result := record.Result{
+	result := &record.Result{
 		Object:  *obj.Record(),
 		Request: obj,
 	}
 
 	o, err := m.sendUpdateObject(
 		ctx,
-		record.Wrap(activate),
-		record.Wrap(result),
+		record.ToVirtual(activate),
+		record.ToVirtual(result),
 		obj,
 		memory,
 	)
@@ -886,18 +888,17 @@ func (m *client) activateObject(
 	var (
 		asType *insolar.Reference
 	)
-	child := record.Child{Ref: obj}
+	child := &record.Child{Ref: obj}
 	if parentDesc.ChildPointer() != nil {
 		child.PrevChild = *parentDesc.ChildPointer()
 	}
 	if asDelegate {
 		asType = &prototype
 	}
-	virtChild := record.Wrap(child)
 
 	_, err = m.registerChild(
 		ctx,
-		virtChild,
+		record.ToVirtual(child),
 		parent,
 		obj,
 		asType,
@@ -936,14 +937,14 @@ func (m *client) updateObject(
 		return nil, errors.Wrap(err, "failed to update object")
 	}
 
-	amend := record.Amend{
+	amend := &record.Amend{
 		Request:     request,
 		Image:       *image,
 		IsPrototype: obj.IsPrototype(),
 		PrevState:   *obj.StateID(),
 	}
 
-	resultRecord := record.Result{
+	resultRecord := &record.Result{
 		Object:  *obj.HeadRef().Record(),
 		Request: request,
 		Payload: result,
@@ -951,8 +952,8 @@ func (m *client) updateObject(
 
 	o, err := m.sendUpdateObject(
 		ctx,
-		record.Wrap(amend),
-		record.Wrap(resultRecord),
+		record.ToVirtual(amend),
+		record.ToVirtual(resultRecord),
 		*obj.HeadRef(),
 		memory,
 	)

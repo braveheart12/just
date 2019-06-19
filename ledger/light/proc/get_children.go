@@ -150,9 +150,7 @@ func (p *GetChildren) reply(ctx context.Context) bus.Reply {
 			return bus.Reply{Err: errors.New("failed to retrieve children")}
 		}
 
-		virtRec := rec.Virtual
-		concrete := record.Unwrap(virtRec)
-		childRec, ok := concrete.(*record.Child)
+		childRec, ok := rec.Virtual.(*record.Child)
 		if !ok {
 			return bus.Reply{Err: errors.New("failed to retrieve children")}
 		}

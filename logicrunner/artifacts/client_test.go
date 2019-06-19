@@ -226,11 +226,11 @@ func (s *amSuite) TestLedgerArtifactManager_GetRequest_Success() {
 	pulseAccessor := pulse.NewAccessorMock(s.T())
 	pulseAccessor.LatestMock.Return(*insolar.GenesisPulse, nil)
 
-	req := record.Request{
+	req := &record.Request{
 		Method: "test",
 	}
-	virtRec := record.Wrap(req)
-	data, err := virtRec.Marshal()
+	virt := record.ToVirtual(req)
+	data, err := virt.Marshal()
 	require.NoError(s.T(), err)
 	finalResponse := &reply.Request{Record: data}
 

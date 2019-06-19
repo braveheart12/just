@@ -72,10 +72,9 @@ func (p *PassState) Proceed(ctx context.Context) error {
 	}
 
 	virtual := rec.Virtual
-	concrete := record.Unwrap(virtual)
-	state, ok := concrete.(record.State)
+	state, ok := virtual.(record.State)
 	if !ok {
-		return fmt.Errorf("invalid object record %#v", virtual)
+		return fmt.Errorf("expect State virtual object, but got %T", virtual)
 	}
 
 	if state.ID() == record.StateDeactivation {
@@ -96,10 +95,11 @@ func (p *PassState) Proceed(ctx context.Context) error {
 		}
 		memory = b.Value
 	}
-	buf, err := rec.Marshal()
+	buf, err := virtual.Marshal()
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal state record")
+		return errors.Wrap(err, "failed to marshal virtual state record")
 	}
+
 	msg, err := payload.NewMessage(&payload.State{
 		Record: buf,
 		Memory: memory,

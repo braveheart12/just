@@ -108,13 +108,14 @@ func (br *BaseRecord) Create(ctx context.Context) error {
 	}
 
 	genesisID := insolar.GenesisRecord.ID()
-	genesisRecord := record.Genesis{Hash: insolar.GenesisRecord}
-	virtRec := record.Wrap(genesisRecord)
-	rec := record.Store{
-		Virtual: &virtRec,
-		JetID:   insolar.ZeroJetID,
+	genesisRecord := &record.Genesis{
+		Hash: insolar.GenesisRecord,
 	}
-	err = br.RecordModifier.Set(ctx, genesisID, rec)
+	item := record.Item{
+		JetID:   insolar.ZeroJetID,
+		Virtual: genesisRecord,
+	}
+	err = br.RecordModifier.Set(ctx, genesisID, item)
 	if err != nil {
 		return errors.Wrap(err, "can't save genesis record into storage")
 	}

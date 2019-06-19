@@ -274,9 +274,7 @@ func (h *Handler) handleGetChildren(
 			return nil, errors.New("failed to retrieve children")
 		}
 
-		virtRec := rec.Virtual
-		concrete := record.Unwrap(virtRec)
-		childRec, ok := concrete.(*record.Child)
+		childRec, ok := rec.Virtual.(*record.Child)
 		if !ok {
 			return nil, errors.New("failed to retrieve children")
 		}
@@ -297,29 +295,26 @@ func (h *Handler) handleGetChildren(
 func (h *Handler) handleGetRequest(ctx context.Context, parcel insolar.Parcel) (insolar.Reply, error) {
 	msg := parcel.Message().(*message.GetRequest)
 
-	rec, err := h.RecordAccessor.ForID(ctx, msg.Request)
+	item, err := h.RecordAccessor.ForID(ctx, msg.Request)
 	if err != nil {
 		return nil, errors.New("failed to fetch request")
 	}
 
-	virtRec := rec.Virtual
-	concrete := record.Unwrap(virtRec)
-	_, ok := concrete.(*record.Request)
+	req, ok := item.Virtual.(*record.Request)
 	if !ok {
 		return nil, errors.New("failed to decode request")
 	}
 
-	data, err := virtRec.Marshal()
+	virtual := record.ToVirtual(req)
+	data, err := virtual.Marshal()
 	if err != nil {
 		return nil, errors.New("failed to serialize request")
 	}
 
-	rep := reply.Request{
+	return &reply.Request{
 		ID:     msg.Request,
 		Record: data,
-	}
-
-	return &rep, nil
+	}, nil
 }
 
 func (h *Handler) handleGetObjectIndex(ctx context.Context, parcel insolar.Parcel) (insolar.Reply, error) {

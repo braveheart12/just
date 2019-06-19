@@ -20,7 +20,32 @@ import (
 	"github.com/insolar/insolar/insolar"
 )
 
-type Record interface{}
+// Record is an interface which used to represent concrete protobuf records.
+type Record interface {
+	Marshal() ([]byte, error)
+}
+
+// Item is an Go representation of Store (required step to INS-2671).
+type Item struct {
+	JetID   insolar.JetID
+	Virtual Record
+}
+
+// ToStore converts Item struct to Store struct.
+func (it *Item) ToStore() Store {
+	return Store{
+		JetID:   it.JetID,
+		Virtual: ToVirtual(it.Virtual),
+	}
+}
+
+// ToItem converts Store struct to Item struct.
+func (s *Store) ToItem() Item {
+	return Item{
+		JetID:   s.JetID,
+		Virtual: FromVirtual(s.Virtual),
+	}
+}
 
 // StateID is a state of lifeline records.
 type StateID int
@@ -132,7 +157,7 @@ func (Genesis) GetIsPrototype() bool {
 
 type CompositeFilamentRecord struct {
 	RecordID insolar.ID
-	Record   Store
+	Item     Item
 
 	MetaID insolar.ID
 	Meta   PendingFilament

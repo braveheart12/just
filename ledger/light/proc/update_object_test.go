@@ -88,25 +88,25 @@ func TestMessageHandler_HandleUpdateObject_FetchesIndexFromHeavy(t *testing.T) {
 	}
 
 	objIndex := object.Lifeline{LatestState: genRandomID(0), StateID: record.StateActivation}
-	amendRecord := record.Amend{
+	amendRecord := &record.Amend{
 		PrevState: *objIndex.LatestState,
 	}
-	amendVirt := record.Wrap(amendRecord)
+	amendVirt := record.ToVirtual(amendRecord)
 	amendData, err := amendVirt.Marshal()
 	require.NoError(t, err)
 
 	objectRef := genRandomRef(0)
-	resultRecord := record.Result{
+	resultRecord := &record.Result{
 		Object: *objectRef.Record(),
 	}
-	resultVirt := record.Wrap(resultRecord)
+	resultVirt := record.ToVirtual(resultRecord)
 	resultData, err := resultVirt.Marshal()
 	require.NoError(t, err)
 
 	msg := message.UpdateObject{
-		Record: amendData,
+		Record:       amendData,
 		ResultRecord: resultData,
-		Object: *objectRef,
+		Object:       *objectRef,
 	}
 
 	mb.SendFunc = func(c context.Context, gm insolar.Message, o *insolar.MessageSendOptions) (r insolar.Reply, r1 error) {
@@ -184,25 +184,25 @@ func TestMessageHandler_HandleUpdateObject_UpdateIndexState(t *testing.T) {
 		LatestUpdate: 0,
 		JetID:        insolar.JetID(jetID),
 	}
-	amendRecord := record.Amend{
+	amendRecord := &record.Amend{
 		PrevState: *objIndex.LatestState,
 	}
-	amendVirt := record.Wrap(amendRecord)
+	amendVirt := record.ToVirtual(amendRecord)
 	amendData, err := amendVirt.Marshal()
 	require.NoError(t, err)
 
 	objectRef := genRandomRef(0)
-	resultRecord := record.Result{
+	resultRecord := &record.Result{
 		Object: *objectRef.Record(),
 	}
-	resultVirt := record.Wrap(resultRecord)
+	resultVirt := record.ToVirtual(resultRecord)
 	resultData, err := resultVirt.Marshal()
 	require.NoError(t, err)
 
 	msg := message.UpdateObject{
-		Record: amendData,
+		Record:       amendData,
 		ResultRecord: resultData,
-		Object: *objectRef,
+		Object:       *objectRef,
 	}
 	ctx := context.Background()
 	err = indexMemoryStor.Set(ctx, insolar.FirstPulseNumber, *msg.Object.Record(), objIndex)

@@ -18,6 +18,7 @@ package rootdomain
 
 import (
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/insolar/insolar/insolar"
@@ -26,8 +27,8 @@ import (
 )
 
 var (
-	idHex  = "00010001f6cbce635be3d8ef43149f44f921b0ddf9c01b62a18f070160125657"
-	refHex = idHex + "0000000000000000000000000000000000000000000000000000000000000000"
+	idHex  = "00010001c1856d8980e09dd61b02b9fd47c6f1e89bd373c755ffa6f48faa4818"
+	refHex = idHex + strings.Repeat("0", 64)
 )
 
 func TestID(t *testing.T) {
@@ -48,7 +49,7 @@ func TestReference(t *testing.T) {
 func TestGenesisRef(t *testing.T) {
 	var (
 		pubKey    = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEf+vsMVU75xH8uj5WRcOqYdHXtaHH\nN0na2RVQ1xbhsVybYPae3ujNHeQCPj+RaJyMVhb6Aj/AOsTTOPFswwIDAQ==\n-----END PUBLIC KEY-----\n"
-		pubKeyRef = "1tJE6PgTo7rnesQ6SRXBK2GiWAGP3K1WbZh34iooTP.11111111111111111111111111111111"
+		pubKeyRef = "1tJCHKzHwp7piDhRKXs6rxGbUNnzQV81UqbE5zzi4E.11111111111111111111111111111111"
 	)
 	genesisRef := GenesisRef(pubKey)
 	require.Equal(t, pubKeyRef, genesisRef.String(), "reference by name always the same")

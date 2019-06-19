@@ -267,16 +267,15 @@ func (i *InMemoryIndex) SetRequest(ctx context.Context, pn insolar.PulseNumber, 
 	b.Lock()
 	defer b.Unlock()
 
-	pf := record.PendingFilament{
+	pf := &record.PendingFilament{
 		RecordID: reqID,
 	}
 	pf.PreviousRecord = b.objectMeta.Lifeline.PendingPointer
 
-	pfv := record.Wrap(pf)
-	hash := record.HashVirtual(i.pcs.ReferenceHasher(), pfv)
+	hash := record.Hash(i.pcs.ReferenceHasher(), pf)
 	metaID := *insolar.NewID(pn, hash)
 
-	err := i.recordStorage.Set(ctx, metaID, record.Store{Virtual: &pfv})
+	err := i.recordStorage.Set(ctx, metaID, record.Item{Virtual: pf})
 	if err != nil {
 		return errors.Wrap(err, "failed to create a meta-record about pending request")
 	}
@@ -325,16 +324,15 @@ func (i *InMemoryIndex) SetResult(ctx context.Context, pn insolar.PulseNumber, o
 	b.Lock()
 	defer b.Unlock()
 
-	pf := record.PendingFilament{
+	pf := &record.PendingFilament{
 		RecordID: resID,
 	}
 	pf.PreviousRecord = b.objectMeta.Lifeline.PendingPointer
 
-	pfv := record.Wrap(pf)
-	hash := record.HashVirtual(i.pcs.ReferenceHasher(), pfv)
+	hash := record.Hash(i.pcs.ReferenceHasher(), pf)
 	metaID := *insolar.NewID(pn, hash)
 
-	err := i.recordStorage.Set(ctx, metaID, record.Store{Virtual: &pfv})
+	err := i.recordStorage.Set(ctx, metaID, record.Item{Virtual: pf})
 	if err != nil {
 		return errors.Wrap(err, "failed to create a meta-record about pending request")
 	}
@@ -390,12 +388,11 @@ func (i *InMemoryIndex) SetFilament(ctx context.Context, pn insolar.PulseNumber,
 	for idx, rec := range recs {
 		recsIds[idx] = rec.MetaID
 
-		recV := record.Wrap(rec.Meta)
-		err := i.recordStorage.Set(ctx, rec.MetaID, record.Store{Virtual: &recV})
+		err := i.recordStorage.Set(ctx, rec.MetaID, record.Item{Virtual: &rec.Meta})
 		if err != nil {
 			return errors.Wrap(err, "filament update failed")
 		}
-		err = i.recordStorage.Set(ctx, rec.RecordID, rec.Record)
+		err = i.recordStorage.Set(ctx, rec.RecordID, rec.Item)
 		if err != nil {
 			return errors.Wrap(err, "filament update failed")
 		}
@@ -421,18 +418,18 @@ func (i *InMemoryIndex) RefreshState(ctx context.Context, pn insolar.PulseNumber
 
 	for _, chainLink := range b.pendingMeta.fullFilament {
 		for _, metaID := range chainLink.MetaRecordsIDs {
-			metaRec, err := i.recordStorage.ForID(ctx, metaID)
+			item, err := i.recordStorage.ForID(ctx, metaID)
 			if err != nil {
 				return errors.Wrap(err, "failed to refresh an index state")
 			}
 
-			concreteMeta := record.Unwrap(metaRec.Virtual).(*record.PendingFilament)
+			concreteMeta := item.Virtual.(*record.PendingFilament)
 			rec, err := i.recordStorage.ForID(ctx, concreteMeta.RecordID)
 			if err != nil {
 				return errors.Wrap(err, "failed to refresh an index state")
 			}
 
-			switch r := record.Unwrap(rec.Virtual).(type) {
+			switch r := rec.Virtual.(type) {
 			case *record.Request:
 				b.pendingMeta.notClosedRequestsIdsIndex[chainLink.PN][*r.Object.Record()] = struct{}{}
 			case *record.Result:
@@ -498,8 +495,7 @@ func (i *InMemoryIndex) FirstPending(ctx context.Context, currentPN insolar.Puls
 	if err != nil {
 		return nil, err
 	}
-
-	return record.Unwrap(rec.Virtual).(*record.PendingFilament), nil
+	return rec.Virtual.(*record.PendingFilament), nil
 
 }
 
@@ -525,7 +521,7 @@ func (i *InMemoryIndex) OpenRequestsForObjID(ctx context.Context, currentPN inso
 			return nil, err
 		}
 
-		switch r := record.Unwrap(rec.Virtual).(type) {
+		switch r := rec.Virtual.(type) {
 		case *record.Request:
 			res[idx] = *r
 		default:
@@ -553,15 +549,15 @@ func (i *InMemoryIndex) Records(ctx context.Context, currentPN insolar.PulseNumb
 			return nil, err
 		}
 
-		concreteMeta := record.Unwrap(metaRec.Virtual).(*record.PendingFilament)
+		concreteMeta := metaRec.Virtual.(*record.PendingFilament)
 		rec, err := i.recordStorage.ForID(ctx, concreteMeta.RecordID)
 		if err != nil {
 			return nil, err
 		}
 
 		res[idx] = record.CompositeFilamentRecord{
-			Record:   rec,
 			RecordID: concreteMeta.RecordID,
+			Item:     *rec,
 			Meta:     *concreteMeta,
 			MetaID:   id,
 		}

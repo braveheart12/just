@@ -22,9 +22,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// HashVirtual returns hash for virtual record.
-func HashVirtual(h hash.Hash, rec Virtual) []byte {
-	// Signature must not affects material record hash calculating.
+// Hash hashes record with provided hash implementation.
+func Hash(h hash.Hash, rec Record) []byte {
 	buf, err := rec.Marshal()
 	if err != nil {
 		panic(errors.Wrap(err, "failed to marshal virtual record"))

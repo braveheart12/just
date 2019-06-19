@@ -49,14 +49,13 @@ func (p *GetRequest) Proceed(ctx context.Context) error {
 		return errors.Wrap(err, "failed to fetch request")
 	}
 
-	virtRec := rec.Virtual
-	concrete := record.Unwrap(virtRec)
-	_, ok := concrete.(*record.Request)
+	req, ok := rec.Virtual.(*record.Request)
 	if !ok {
 		return errors.New("failed to decode request")
 	}
 
-	data, err := virtRec.Marshal()
+	virtual := record.ToVirtual(req)
+	data, err := virtual.Marshal()
 	if err != nil {
 		return errors.Wrap(err, "can't serialize record")
 	}

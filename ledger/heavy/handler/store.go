@@ -104,17 +104,17 @@ func storeRecords(
 	inslog := inslogger.FromContext(ctx)
 
 	for _, rawRec := range rawRecords {
-		rec := record.Store{}
-		err := rec.Unmarshal(rawRec)
+		s := record.Store{}
+		err := s.Unmarshal(rawRec)
 		if err != nil {
 			inslog.Error(err, "heavyserver: deserialize record failed")
 			continue
 		}
+		item := s.ToItem()
 
-		virtRec := *rec.Virtual
-		hash := record.HashVirtual(pcs.ReferenceHasher(), virtRec)
+		hash := record.Hash(pcs.ReferenceHasher(), item.Virtual)
 		id := insolar.NewID(pn, hash)
-		err = records.Set(ctx, *id, rec)
+		err = records.Set(ctx, *id, item)
 		if err != nil {
 			inslog.Error(err, "heavyserver: store record failed")
 			continue

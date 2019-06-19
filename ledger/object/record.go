@@ -43,7 +43,7 @@ type RecordStorage interface {
 // RecordAccessor provides info about record-values from storage.
 type RecordAccessor interface {
 	// ForID returns record for provided id.
-	ForID(ctx context.Context, id insolar.ID) (record.Store, error)
+	ForID(ctx context.Context, id insolar.ID) (*record.Item, error)
 }
 
 //go:generate minimock -i github.com/insolar/insolar/ledger/object.RecordCollectionAccessor -o ./ -s _mock.go
@@ -51,7 +51,7 @@ type RecordAccessor interface {
 // RecordCollectionAccessor provides methods for querying records with specific search conditions.
 type RecordCollectionAccessor interface {
 	// ForPulse returns []MaterialRecord for a provided jetID and a pulse number.
-	ForPulse(ctx context.Context, jetID insolar.JetID, pn insolar.PulseNumber) []record.Store
+	ForPulse(ctx context.Context, jetID insolar.JetID, pn insolar.PulseNumber) []record.Item
 }
 
 //go:generate minimock -i github.com/insolar/insolar/ledger/object.RecordModifier -o ./ -s _mock.go
@@ -59,7 +59,7 @@ type RecordCollectionAccessor interface {
 // RecordModifier provides methods for setting record-values to storage.
 type RecordModifier interface {
 	// Set saves new record-value in storage.
-	Set(ctx context.Context, id insolar.ID, rec record.Store) error
+	Set(ctx context.Context, id insolar.ID, rec record.Item) error
 }
 
 //go:generate minimock -i github.com/insolar/insolar/ledger/object.RecordCleaner -o ./ -s _mock.go
@@ -76,21 +76,21 @@ type RecordMemory struct {
 	jetIndexAccessor store.JetIndexAccessor
 
 	lock     sync.RWMutex
-	recsStor map[insolar.ID]record.Store
+	recsStor map[insolar.ID]record.Item
 }
 
 // NewRecordMemory creates a new instance of RecordMemory storage.
 func NewRecordMemory() *RecordMemory {
 	ji := store.NewJetIndex()
 	return &RecordMemory{
-		recsStor:         map[insolar.ID]record.Store{},
+		recsStor:         map[insolar.ID]record.Item{},
 		jetIndex:         ji,
 		jetIndexAccessor: ji,
 	}
 }
 
 // Set saves new record-value in storage.
-func (m *RecordMemory) Set(ctx context.Context, id insolar.ID, rec record.Store) error {
+func (m *RecordMemory) Set(ctx context.Context, id insolar.ID, rec record.Item) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -110,28 +110,26 @@ func (m *RecordMemory) Set(ctx context.Context, id insolar.ID, rec record.Store)
 }
 
 // ForID returns record for provided id.
-func (m *RecordMemory) ForID(ctx context.Context, id insolar.ID) (rec record.Store, err error) {
+func (m *RecordMemory) ForID(ctx context.Context, id insolar.ID) (*record.Item, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
 	rec, ok := m.recsStor[id]
 	if !ok {
-		err = ErrNotFound
-		return
+		return nil, ErrNotFound
 	}
-
-	return
+	return &rec, nil
 }
 
 // ForPulse returns []MaterialRecord for a provided jetID and a pulse number.
 func (m *RecordMemory) ForPulse(
 	ctx context.Context, jetID insolar.JetID, pn insolar.PulseNumber,
-) []record.Store {
+) []record.Item {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
 	ids := m.jetIndexAccessor.For(jetID)
-	var res []record.Store
+	var res []record.Item
 	for id := range ids {
 		if id.Pulse() == pn {
 			rec := m.recsStor[id]
@@ -184,19 +182,24 @@ func NewRecordDB(db store.DB) *RecordDB {
 }
 
 // Set saves new record-value in storage.
-func (r *RecordDB) Set(ctx context.Context, id insolar.ID, rec record.Store) error {
+func (r *RecordDB) Set(ctx context.Context, id insolar.ID, rec record.Item) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	return r.set(id, rec)
+	return r.set(id, rec.ToStore())
 }
 
 // ForID returns record for provided id.
-func (r *RecordDB) ForID(ctx context.Context, id insolar.ID) (record.Store, error) {
+func (r *RecordDB) ForID(ctx context.Context, id insolar.ID) (*record.Item, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	return r.get(id)
+	s, err := r.get(id)
+	if err != nil {
+		return nil, err
+	}
+	item := s.ToItem()
+	return &item, nil
 }
 
 func (r *RecordDB) set(id insolar.ID, rec record.Store) error {
@@ -217,13 +220,14 @@ func (r *RecordDB) set(id insolar.ID, rec record.Store) error {
 
 func (r *RecordDB) get(id insolar.ID) (record.Store, error) {
 	buff, err := r.db.Get(recordKey(id))
+	rec := record.Store{}
 	if err == nil {
-		rec := record.Store{}
 		err = rec.Unmarshal(buff)
 		return rec, err
 	}
+
 	if err == store.ErrNotFound {
 		err = ErrNotFound
 	}
-	return record.Store{}, err
+	return rec, err
 }
