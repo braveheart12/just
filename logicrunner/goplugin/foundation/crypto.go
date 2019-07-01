@@ -73,9 +73,12 @@ func VerifySignature(rawRequest []byte, signature string, key string, rawpublicp
 
 	hash := sha256.Sum256(rawRequest)
 	R, S := PointsFromDER(sig)
-	valid := ecdsa.Verify(publicKey.(*ecdsa.PublicKey), hash[:], R, S)
+	var pub = publicKey.(*ecdsa.PublicKey)
+
+	valid := ecdsa.Verify(pub, hash[:], R, S)
 	if !valid {
-		return fmt.Errorf("invalid signature: hash = %s, r = %s, s = %s", base64.StdEncoding.EncodeToString(hash[:]), R.String(), S.String())
+		return fmt.Errorf("invalid signature: hash = %s, r = %s, s = %s, pubX = %s, pubY = %s",
+			base64.StdEncoding.EncodeToString(hash[:]), R.String(), S.String(), pub.X.String(), pub.Y.String())
 	}
 
 	return nil
