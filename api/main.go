@@ -190,22 +190,22 @@ func (ar *Runner) getMemberPubKey(ctx context.Context, ref string) (crypto.Publi
 
 	reference, err := insolar.NewReferenceFromBase58(ref)
 	if err != nil {
-		return nil, errors.Wrap(err, "[ getMemberPubKey ] Can't parse ref")
+		return nil, errors.Wrap(err, "can't parse ref")
 	}
 	res, err := ar.ContractRequester.SendRequest(ctx, reference, "GetPublicKey", []interface{}{})
 	if err != nil {
-		return nil, errors.Wrap(err, "[ getMemberPubKey ] Can't get public key")
+		return nil, errors.Wrap(err, "can't get public key")
 	}
 
 	publicKeyString, err := extractor.PublicKeyResponse(res.(*reply.CallMethod).Result)
 	if err != nil {
-		return nil, errors.Wrap(err, "[ getMemberPubKey ] Can't extract response")
+		return nil, errors.Wrap(err, "can't extract response")
 	}
 
 	kp := platformpolicy.NewKeyProcessor()
 	publicKey, err = kp.ImportPublicKeyPEM([]byte(publicKeyString))
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to convert public key")
+		return nil, errors.Wrap(err, "failed to convert public key")
 	}
 
 	ar.cacheLock.Lock()
