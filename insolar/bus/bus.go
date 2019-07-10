@@ -342,3 +342,67 @@ func (b *Bus) wrapMeta(
 
 	return meta, nil
 }
+
+type RetrySender struct {
+	sender      Sender
+	shouldRetry func(msg *message.Message) bool
+	retriesLeft int
+}
+
+func NewRetrySender(sender Sender, retry func(msg *message.Message) bool, retries int) *RetrySender {
+	return &RetrySender{
+		sender:      sender,
+		shouldRetry: retry,
+		retriesLeft: retries,
+	}
+}
+
+func (r *RetrySender) SendRole(
+	ctx context.Context, msg *message.Message, role insolar.DynamicRole, object insolar.Reference,
+) (<-chan *message.Message, func()) {
+	output := make(chan *message.Message)
+	done := make(chan struct{})
+	closeDone := func() {
+		close(done)
+	}
+
+	try := func() bool {
+		select {
+		case <-done:
+			return false
+		default:
+		}
+
+		reps, d := r.sender.SendRole(ctx, msg, role, object)
+		defer d()
+		for rep := range reps {
+			if r.shouldRetry(rep) {
+				return true
+			}
+
+			select {
+			case output <- rep:
+			case <-done:
+				return false
+			}
+		}
+		return false
+	}
+
+	go func() {
+		for r.retriesLeft > 0 && try() {
+			r.retriesLeft--
+		}
+		close(output)
+	}()
+
+	return output, closeDone
+}
+
+func (r *RetrySender) SendTarget(ctx context.Context, msg *message.Message, target insolar.Reference) (<-chan *message.Message, func()) {
+	panic("implement me")
+}
+
+func (r *RetrySender) Reply(ctx context.Context, origin payload.Meta, reply *message.Message) {
+	r.sender.Reply(ctx, origin, reply)
+}
