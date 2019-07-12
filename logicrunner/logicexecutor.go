@@ -30,11 +30,10 @@ import (
 )
 
 //go:generate minimock -i github.com/insolar/insolar/logicrunner.LogicExecutor -o ./ -s _mock.go
-
 type LogicExecutor interface {
-	Execute(ctx context.Context, transcript *Transcript) (*RequestResult, error)
-	ExecuteMethod(ctx context.Context, transcript *Transcript) (*RequestResult, error)
-	ExecuteConstructor(ctx context.Context, transcript *Transcript) (*RequestResult, error)
+	Execute(ctx context.Context, transcript *Transcript) (artifacts.RequestResult, error)
+	ExecuteMethod(ctx context.Context, transcript *Transcript) (artifacts.RequestResult, error)
+	ExecuteConstructor(ctx context.Context, transcript *Transcript) (artifacts.RequestResult, error)
 }
 
 type logicExecutor struct {
@@ -46,18 +45,20 @@ func NewLogicExecutor() LogicExecutor {
 	return &logicExecutor{}
 }
 
-func (le *logicExecutor) Execute(ctx context.Context, transcript *Transcript) (*RequestResult, error) {
+func (le *logicExecutor) Execute(ctx context.Context, transcript *Transcript) (artifacts.RequestResult, error) {
 	switch transcript.Request.CallType {
 	case record.CTMethod:
+		inslogger.FromContext(ctx).Error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! there")
 		return le.ExecuteMethod(ctx, transcript)
 	case record.CTSaveAsChild, record.CTSaveAsDelegate:
+		inslogger.FromContext(ctx).Error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! here")
 		return le.ExecuteConstructor(ctx, transcript)
 	default:
 		return nil, errors.New("Unknown request call type")
 	}
 }
 
-func (le *logicExecutor) ExecuteMethod(ctx context.Context, transcript *Transcript) (*RequestResult, error) {
+func (le *logicExecutor) ExecuteMethod(ctx context.Context, transcript *Transcript) (artifacts.RequestResult, error) {
 	ctx, span := instracer.StartSpan(ctx, "logicExecutor.ExecuteMethod")
 	defer span.End()
 
@@ -95,17 +96,24 @@ func (le *logicExecutor) ExecuteMethod(ctx context.Context, transcript *Transcri
 	}
 
 	if transcript.Deactivate {
+		res.SetDeactivate(objDesc)
 		res.Deactivate()
 	} else if !bytes.Equal(objDesc.Memory(), newData) {
-		res.Update(newData)
+		inslogger.FromContext(ctx).Error("123")
+		if err := res.SetAmend(objDesc, newData); err != nil {
+			return nil, err
+		}
+	} else {
+		res.SetNone(objDesc.HeadRef())
 	}
+
 	return res, nil
 }
 
 func (le *logicExecutor) ExecuteConstructor(
 	ctx context.Context, transcript *Transcript,
 ) (
-	*RequestResult, error,
+	artifacts.RequestResult, error,
 ) {
 	ctx, span := instracer.StartSpan(ctx, "LogicRunner.executeConstructorCall")
 	defer span.End()
@@ -138,7 +146,12 @@ func (le *logicExecutor) ExecuteConstructor(
 	}
 
 	res := NewRequestResult(nil)
-	res.Activate(newData)
+	res.SetActivate(
+		&transcript.RequestRef,
+		request.Base,
+		request.CallType == record.CTSaveAsDelegate,
+		newData,
+	)
 	return res, nil
 }
 
